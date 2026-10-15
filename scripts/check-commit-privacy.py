@@ -4,12 +4,20 @@ import re
 import subprocess
 import sys
 
+# Explicitly approved public display names, matching the application repositories.
+# Keep private names, addresses, and the local denylist out of this file.
+PUBLIC_DISPLAY_NAMES = {'petergstfsn': {'Peter'}}
+
 
 def public_identity(name, email):
     if name == 'GitHub' and email == 'noreply@github.com':
         return True
     match = re.fullmatch(r'(?:[0-9]+\+)?([A-Za-z0-9-]+(?:\[bot\])?)@users\.noreply\.github\.com', email)
-    return bool(match and name.casefold() == match.group(1).casefold())
+    if not match:
+        return False
+    login = match.group(1).casefold()
+    approved = {login} | {value.casefold() for value in PUBLIC_DISPLAY_NAMES.get(login, set())}
+    return name.casefold() in approved
 
 
 def main():
