@@ -9,7 +9,8 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "types": "wrangler types",
-    "check": "npm run typecheck && npm test && npm run build && wrangler deploy --dry-run"
+    "check": "npm run typecheck && npm test && npm run check:deploy",
+    "check:deploy": "node scripts/check-deploy-build.mjs"
   },
   "dependencies": {
     "jose": "^6.1.0",
