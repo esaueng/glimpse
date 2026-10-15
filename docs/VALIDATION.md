@@ -13,7 +13,7 @@
 
 ## Hosted build configuration
 
-Cloudflare's Glimpse Production and Previews Base build commands were saved as `npm run build` on 15 October 2026; deploy remains `npx wrangler deploy`, preview remains `npx wrangler preview`, with root `/`. No build retry or deployment was triggered. GitHub Actions could not start either initial build-fix job because the account reported failed payments or an exhausted spending limit. This infrastructure block is distinct from local test results.
+Cloudflare's Glimpse Production build command was saved as `npm run build` on 15 October 2026 and confirmed after reload; deploy remains `npx wrangler deploy`, with root `/`. The Previews Base UI also displays `npm run build` after saving, but the subsequent automatic branch build still reports no build command and fails before asset validation because Wrangler requires a separate `previews` block with preview-safe D1/Access bindings. Do not treat that UI value as proof of hosted preview execution. No manual build retry, production deployment or migration was performed. GitHub Actions could not start either initial build-fix job because the account reported failed payments or an exhausted spending limit. These infrastructure limitations are distinct from local test results.
 
 ## Visual verification
 
