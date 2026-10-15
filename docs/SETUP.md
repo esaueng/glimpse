@@ -19,3 +19,17 @@ The app relay accepts only `event` and `bucket`; it never accepts Basic client e
 ## Rollback
 
 Set both app flags to `false` and redeploy the app Workers to stop collection. Optional users can independently withdraw in the UI. The apps tolerate unavailable Glimpse bindings and failed deliveries. Roll back app versions before deleting the Glimpse service or removing bindings. Keep the protected aggregate database only for its documented retention; any manual deletion/migration is a separate authorized action. Glimpse has no auto-deploy workflow in this PR.
+
+## Cloudflare Workers Builds
+
+In **Glimpse → Settings → Build → Build configuration**, set:
+
+| Setting | Value |
+| --- | --- |
+| Build command | `npm run build` |
+| Deploy command | `npx wrangler deploy` |
+| Root directory | `/` |
+
+The Vite build creates `dist`, which is intentionally ignored by Git. Leaving Build command as `None` made the initial Cloudflare build fail with “assets.directory … does not exist”. The repository also declares `build.command` in Wrangler so direct CLI deployments build assets first. Cloudflare [documents that Workers Builds does not honor this custom-build configuration](https://developers.cloudflare.com/workers/ci-cd/builds/configuration/), so configure the hosted Build command explicitly as above.
+
+`npm run check:deploy` removes generated `dist` output, runs a deployment **dry-run**, and checks that the generated HTML references existing bundled JavaScript and CSS. CI invokes this regression after typechecking and tests; it cannot pass solely because an earlier frontend build left `dist` behind. This does not upload a Worker, create/migrate D1, or establish production Access configuration. Once the fix is merged and the hosted commands are saved, retry the Cloudflare build.
