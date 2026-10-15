@@ -17,7 +17,7 @@
     {
       "binding": "DB",
       "database_name": "glimpse",
-      "database_id": "00000000-0000-0000-0000-000000000000",
+      "database_id": "fcc259ed-acc7-472e-bd35-374c8d44f1ca",
       "migrations_dir": "migrations",
     },
   ],
