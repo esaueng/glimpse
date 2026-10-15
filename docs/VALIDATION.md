@@ -1,6 +1,6 @@
 # Validation and remaining rollout work
 
-15 October 2026. No production deployment, database migration, Access-policy update or analytics activation was performed.
+15 October 2026. The owner authorized dedicated production database setup, the initial migration, and Glimpse deployment. The protected dashboard is live. No app analytics activation was performed.
 
 ## Tested locally
 
@@ -13,7 +13,13 @@
 
 ## Hosted build configuration
 
-Cloudflare's Glimpse Production build command was saved as `npm run build` on 15 October 2026 and confirmed after reload; deploy remains `npx wrangler deploy`, with root `/`. The Previews Base UI also displays `npm run build` after saving, but the subsequent automatic branch build still reports no build command and fails before asset validation because Wrangler requires a separate `previews` block with preview-safe D1/Access bindings. Do not treat that UI value as proof of hosted preview execution. No manual build retry, production deployment or migration was performed. GitHub Actions could not start either initial build-fix job because the account reported failed payments or an exhausted spending limit. These infrastructure limitations are distinct from local test results.
+Cloudflare's Glimpse Production build command is `npm run build`; deploy remains `npx wrangler deploy`, with root `/`. After PR #2 was merged, production build `c544471e-5515-4dcd-87d3-a025837fb10c` on main `1f92aa3` successfully built/uploaded assets, then failed with Cloudflare error `10181` because `DB` referenced the all-zero placeholder ID.
+
+The owner authorized the missing infrastructure work. A dedicated `glimpse` D1 database was created in Esau, its actual ID replaced the placeholder, and Wrangler applied `0001_aggregates.sql` successfully. A remote read confirmed its migration ledger entry and zero aggregate rows. No existing application database was reused, and no synthetic production events were inserted.
+
+With the owner's separate Esau-only Wrangler authorization, source commit `4702ac79376afe509d25044ef0b8352ad968da23` was deployed as Worker version `f63cabb5-da44-4c66-8959-41b0eb0e585f`, with `glimpse.esau.app` and cron `31 3 * * *`. The deployed runtime configuration matches PR #3; merge that PR to retain the binding/domain/Access settings in future main builds. No CI protections were bypassed or PRs merged by this deployment action.
+
+GitHub Actions is separately blocked before jobs start by an account payment/spending-limit error. Hosted branch previews remain unconfigured: the Previews Base UI displays the saved build command, but the observed branch job reports no build command and Wrangler requires a separate `previews` block with preview-safe bindings. Neither limitation is a successful hosted CI result. The production service was deployed directly with the owner's explicit authorization after local checks passed.
 
 ## Visual verification
 
@@ -21,6 +27,15 @@ The generated concept guided the implementation. Compared: header/hero copy and 
 
 Image generation was used only for the UI concept, not as a dashboard asset. Browser screenshots are QA artifacts kept outside the source tree; synthetic fixture generation and the temporary local authorization proxy are not production features or checked-in authentication bypasses.
 
+## Production hostname and Access verification
+
+- `glimpse.esau.app` is attached to Worker `glimpse` for Production only. `workers.dev` and Preview URLs are disabled.
+- A hostname-specific self-hosted Access application named `Glimpse` protects every path on this hostname. It has exactly one Allow policy, `Internal admin tools - Cloudflare`: the verified owner's exact email AND Cloudflare login method. Cloudflare is the sole selected identity provider, with all-provider acceptance and WARP authentication off. There are no bypass, service-auth or broad account-member policies on this application. The existing shared policy was inspected without modifying it.
+- After saving, reopening the application confirmed its hostname, policy and Cloudflare-only identity-provider selection. The policy tester allowed the verified owner and blocked the other three known identities. This tests last-seen identities, not every possible real-world login.
+- Chrome completed Cloudflare authentication using the owner's existing session. After production deployment, reloading `https://glimpse.esau.app/` loaded the real dashboard and successfully queried D1 through the JWT-protected API. Verified combined Basic totals, OpenZCAD and OpenFEA Optional views, explicit opted-in-only labeling, and a one-day date filter. All counts are zero as expected with app collection disabled; production nonzero aggregation/isolation remains unverified. The native date control was used because the browser automation fill helper did not update React date state.
+- Unauthenticated HTTP probes to `/`, `/api/stats` and `/healthz` received 403 managed-challenge responses before Access login. They exposed no application data, but do not independently prove anonymous Access redirect behavior past the zone's bot protection. No challenge rules were weakened.
+- The checked-in route, database binding, Access issuer and this application's AUD match the deployed configuration. No credentials or owner email are included in source.
+
 ## Not yet verified
 
-Production hostname, D1 creation/migration, Access configuration and authorized/unauthorized live behavior, app service-binding resolution, real production event delivery, cron delivery and infrastructure log/backup retention. Both app flags remain false. Read [setup](SETUP.md) and [privacy limits](PRIVACY.md) before activation. Hosted CI results are reported on each PR and are distinct from these local checks.
+Anonymous Access behavior past zone bot protection, app service-binding resolution and real production event delivery/nonzero aggregation, cron delivery and infrastructure log/backup retention. Both app flags remain false. Read [setup](SETUP.md) and [privacy limits](PRIVACY.md) before activation. Hosted CI results are reported on each PR and are distinct from these local checks.
