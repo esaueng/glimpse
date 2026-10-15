@@ -1,0 +1,33 @@
+name: CI
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Check public commit metadata
+        env:
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: python3 scripts/check-commit-privacy.py
+      - run: npm ci
+      - run: npm run check
+      - name: Reject accidental private material
+        run: |
+          python3 - <<'PY'
+          import pathlib, re, subprocess
+          files = subprocess.check_output(['git','ls-files','-z']).decode().split('\0')
+          patterns = [r'-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----', r'(?:ghp|gho)_[A-Za-z0-9]{30,}', r'AKIA[A-Z0-9]{16}']
+          for file in filter(None, files):
+              text = pathlib.Path(file).read_text(errors='ignore')
+              if any(re.search(p, text) for p in patterns):
+                  raise SystemExit('Possible credential in tracked content')
+          PY
