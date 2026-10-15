@@ -6,9 +6,9 @@ A small, protected analytics dashboard for OpenZCAD and OpenFEA. One Cloudflare 
 - Optional usage: explicit opt-in only; browser-local exports, solver outcomes, feature actions and workflow-step counts. Withdrawal stops future collection immediately. Optional figures represent opted-in users only.
 - Combined totals and per-app views, UTC date filters (up to 90 days), activity bars, event counts and timing histograms. App and collection level remain distinct in storage and queries.
 
-Primary domain: [glimpse.esau.app](https://glimpse.esau.app), protected by Cloudflare Access with the owner's exact account identity and Cloudflare login required. The hostname, issuer and application audience are configured in Wrangler; the dedicated database ID is configured. The live Worker currently serves its initial placeholder, pending schema initialization and dashboard deployment.
+Primary domain: [glimpse.esau.app](https://glimpse.esau.app), protected by Cloudflare Access with the owner's exact account identity and Cloudflare login required. The hostname, issuer and application audience are configured in Wrangler; the dedicated database ID is configured. The initial schema is applied and the protected dashboard is deployed. Counts remain empty until the app integrations are deployed and deliberately enabled.
 
-See [setup](docs/SETUP.md), [privacy and consent limits](docs/PRIVACY.md), and [validation status](docs/VALIDATION.md). The database must be provisioned before dashboard deployment. No deploy command runs automatically in GitHub Actions CI.
+See [setup](docs/SETUP.md), [privacy and consent limits](docs/PRIVACY.md), and [validation status](docs/VALIDATION.md). GitHub Actions CI validates without deploying; the existing Cloudflare Workers Builds integration deploys main pushes.
 
 ```sh
 npm ci
