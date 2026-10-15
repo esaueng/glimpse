@@ -22,3 +22,5 @@ The event vocabulary is maintained in `src/contract.ts` and mirrored by the smal
 Cloudflare Workers Builds must have **Build command: `npm run build`**, **Deploy command: `npx wrangler deploy`**, and **Root directory: `/`**. The Wrangler custom build also covers direct CLI use; see [setup](docs/SETUP.md#cloudflare-workers-builds).
 
 OpenLattice3D support requires the additive `0002_openlattice3d.sql` migration before enabling that app. It preserves existing aggregates while expanding the fixed app allowlist. Production application of this migration and app activation remain separate authorized rollout steps; see [setup](docs/SETUP.md#openlattice3d-rollout).
+
+Branch previews have a separate D1 database and Access audience, with the same owner-only access policy. See [Preview setup](docs/SETUP.md#isolated-branch-previews).
