@@ -1,3 +1,4 @@
+import { expandedMetric } from "./expanded";
 // This vocabulary is the entire analytics schema. No free-text properties.
 export const BUCKETS = [
   "lt_100ms",
@@ -41,7 +42,11 @@ export function metric(value: unknown, app: App): Metric | null {
   if (typeof v.event !== "string" || typeof v.bucket !== "string") return null;
   const allowed: readonly string[] =
     v.level === "basic" ? BASIC : v.level === "optional" ? OPTIONAL : [];
-  if (!allowed.includes(v.event)) return null;
+  if (!allowed.includes(v.event)) {
+    return v.level === "optional" && expandedMetric(v.event, v.bucket, app)
+      ? { level: "optional", event: v.event, bucket: v.bucket }
+      : null;
+  }
   if (
     app === "openzcad" &&
     (v.event.startsWith("solver_") ||

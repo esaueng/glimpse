@@ -1,4 +1,5 @@
 import { WorkerEntrypoint } from "cloudflare:workers";
+import { census, CENSUS_FIELDS } from "./expanded";
 import { authorized } from "./auth";
 import { dateRange, metric, type App } from "./contract";
 export async function record(
@@ -17,8 +18,35 @@ export async function record(
     .bind(now.toISOString().slice(0, 10), app, m.level, m.event, m.bucket)
     .run();
 }
+export async function snapshot(
+  env: Pick<Env, "DB">,
+  app: App,
+  value: unknown,
+  now = new Date(),
+) {
+  const c = census(value, app);
+  if (!c) throw new Error("Invalid census");
+  const fields = ["generation", ...CENSUS_FIELDS] as const;
+  await env.DB.prepare(
+    `INSERT INTO daily_census(day,app,${fields.join(",")}) SELECT ?,?,${fields.map(() => "?").join(",")} WHERE ? > COALESCE((SELECT MAX(generation) FROM daily_census WHERE app=?),0)
+    ON CONFLICT(day,app) DO UPDATE SET ${fields.map((k) => `${k}=excluded.${k}`).join(",")}
+    WHERE excluded.generation > daily_census.generation
+    AND excluded.generation > COALESCE((SELECT MAX(generation) FROM daily_census WHERE app=excluded.app AND day<>excluded.day),0)`,
+  )
+    .bind(
+      now.toISOString().slice(0, 10),
+      app,
+      ...fields.map((k) => c[k]),
+      c.generation,
+      app,
+    )
+    .run();
+}
 // Binding entrypoints fix app identity. There is intentionally no HTTP ingest API.
 export class OpenZCADIngest extends WorkerEntrypoint<Env> {
+  async snapshot(value: unknown) {
+    await snapshot(this.env, "openzcad", value);
+  }
   async record(value: unknown) {
     await record(this.env, "openzcad", value);
   }
@@ -76,7 +104,22 @@ export default {
         )
           .bind(range.from, range.to, range.level, range.app, range.app)
           .all();
-        return protect(Response.json({ range, rows: rows.results }));
+        const snapshots =
+          range.level === "optional"
+            ? await env.DB.prepare(
+                `SELECT * FROM daily_census WHERE day>=? AND day<=? AND day>=date('now','-89 days') AND (?='all' OR app=?) ORDER BY day DESC LIMIT 90`,
+              )
+                .bind(range.from, range.to, range.app, range.app)
+                .all()
+            : { results: [] };
+        return protect(
+          Response.json({
+            range,
+            rows: rows.results,
+            census: snapshots.results,
+            receivedAt: new Date().toISOString(),
+          }),
+        );
       }
       if (url.pathname.startsWith("/api/"))
         return protect(new Response("Not found", { status: 404 }));
@@ -88,8 +131,12 @@ export default {
     }
   },
   async scheduled(_controller, env) {
-    await env.DB.prepare(
-      "DELETE FROM daily_counts WHERE day < date('now','-89 days')",
-    ).run();
+    await env.DB.batch(
+      ["daily_counts", "daily_census"].map((table) =>
+        env.DB.prepare(
+          `DELETE FROM ${table} WHERE day < date('now','-89 days')`,
+        ),
+      ),
+    );
   },
 } satisfies ExportedHandler<Env>;
