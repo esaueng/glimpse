@@ -41,3 +41,19 @@ Image generation was used only for the UI concept, not as a dashboard asset. Bro
 ## Not yet verified
 
 Anonymous Access behavior past zone bot protection, app service-binding resolution and real production event delivery/nonzero aggregation, cron delivery and infrastructure log/backup retention. Both app flags remain false. Read [setup](SETUP.md) and [privacy limits](PRIVACY.md) before activation. Hosted CI results are reported on each PR and are distinct from these local checks.
+
+
+## OpenLattice3D extension (15 October 2026)
+
+The third-app collector adds `OpenLattice3DIngest`, the fixed app/date filter and table labels, and separate generation outcome events. Generation counts are labeled independently from solver counts in the per-app view. The combined run total includes both. Its RPC allowlist rejects solver/FEA workflow events and other apps reject generation events.
+
+`npm run check` passes: seven real Worker/RPC/D1/JWT scenarios, typecheck and clean deployment dry-run/build. The new regression upgrades a populated v1 database with `0002_openlattice3d.sql`, verifies old counts survive, accepts third-app metrics, rejects identity/unknown-app data and verifies combined/per-app reads. Production migration, deployment, app binding resolution and real delivery remain pending. No production migration, activation or manual deployment was performed for this extension.
+
+Chrome QA with a local synthetic-data server verified the third-app selector, Optional filter, `Lattice generations` total (3), workspace activity (5) and only OpenLattice3D event rows. No console errors/warnings were observed. These are synthetic UI fixtures outside source and production; the real Worker/D1/JWT tests above verify the backend separately. The OpenLattice3D consent UI was also checked on its local Worker at desktop and 390×844, including reload persistence and actual two-tab withdrawal.
+
+
+## Preview configuration repair (15 October 2026)
+
+The missing `previews` configuration is repaired with an isolated `glimpse-preview` D1 database, a dedicated migration configuration and a separate Preview Access audience. Both migrations were applied to that staging database, not production. The saved `Glimpse previews` Access application protects only this Worker's preview URLs with the same exact-owner AND Cloudflare-login policy; no shared policy was edited.
+
+The configuration regression checks database/migration-target alignment, separate JWT audiences, disabled production workers.dev and absence of production routes, crons or service bindings in Previews. Real local Worker tests reject tokens across both environments and verify that Preview counts do not enter the production test database. Local typecheck, nine regression scenarios and clean Wrangler build/dry-run passed. Hosted preview verification and GitHub CI are recorded on PR #5; the latter is independently blocked by account payments/spending limits until resolved. OpenLattice3D PR #74 passed its hosted checks, merged, and its automatic production build succeeded.
