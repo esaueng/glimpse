@@ -31,3 +31,26 @@ Backend counting reduces terminal-access and personal-data exposure, but routing
 A network service necessarily receives source IP and transport headers at the app/edge. The optional client omits credentials and referrer; the relay constructs a fresh RPC containing only the allowed metric. Glimpse disables request logs/traces and stores none of that metadata. Existing app/Cloudflare/Access security logs and database backups are separate systems and may retain metadata; inspect their settings, access and retention before enabling collection. Do not promise “no IP processing anywhere.” Do not add raw telemetry body logging, session joins, URL capture, GeoIP, custom dimensions, error messages/stacks, or consent receipt identifiers without a fresh design and consent review.
 
 Deployments default both collection switches to false. Enabling basic counters requires the documented review of the actual deployment; optional collection additionally requires the explicit browser choice. Neither PR merge nor a local test constitutes production verification.
+
+## Expanded analytics revision
+
+The owner's selected policy is all expanded statistics **after opt-in**, detailed
+aggregates plus voluntarily shared reports, and no individual timelines. See
+[the exact measurements, consent scopes and rollout](EXPANDED-ANALYTICS.md).
+Existing usage choices require fresh consent for this larger scope. Account
+statistics have their own explicit, expiring permission in OpenZCAD; Glimpse
+receives only aggregate numeric snapshots. OpenFEA has no account census.
+
+Rechecked 2026-10-15 against primary sources: the ICO's [final storage and access
+technology guidance](https://ico.org.uk/for-organisations/direct-marketing-and-privacy-and-electronic-communications/guidance-on-the-use-of-storage-and-access-technologies/)
+was updated on 29 April 2026, including exceptions and consent management. Its
+coverage includes web storage and scripts; the older cookie overview still
+points to an earlier consultation and should not be treated as current detail.
+CNIL's [audience-measurement guidance](https://www.cnil.fr/en/sheet-ndeg16-use-analytics-your-websites-and-applications)
+conditions exemptions and notes national variation. Neither supports a blanket
+claim that removing cookies removes consent obligations. This implementation
+uses explicit opt-in rather than asserting an analytics exemption. Consent
+withdrawal must be easy; see [GDPR Article 7(3)](https://eur-lex.europa.eu/eli/reg/2016/679/oj/eng).
+Jurisdiction, audience (including children), notices, lawful basis, provider logs,
+backup retention and deployment-specific configuration still need review before
+activation. Technical tests cannot certify legal compliance or anonymity.

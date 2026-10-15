@@ -3,6 +3,7 @@ import { build } from "esbuild";
 import { Miniflare, convertV4MiniflareOptions } from "miniflare";
 import { generateKeyPair, exportJWK, SignJWT } from "jose";
 import { readFileSync } from "node:fs";
+import { census, parseReport } from "../src/expanded";
 import { dateRange, metric } from "../src/contract";
 let mf: Miniflare;
 let token: string;
@@ -25,7 +26,7 @@ beforeAll(async () => {
     .sign(privateKey);
   const bundle = await build({
     stdin: {
-      contents: `import worker from './src/index.ts'; export * from './src/index.ts'; export default worker; import { WorkerEntrypoint } from 'cloudflare:workers'; export class CronProbe extends WorkerEntrypoint { async run() { await worker.scheduled({}, this.env); } }`,
+      contents: `import worker, { snapshot } from './src/index.ts'; export * from './src/index.ts'; export default worker; import { WorkerEntrypoint } from 'cloudflare:workers'; export class CronProbe extends WorkerEntrypoint { async run() { await worker.scheduled({}, this.env); } async at(value, day) { await snapshot(this.env, 'openzcad', value, new Date(day)); } }`,
       resolveDir: process.cwd(),
     },
     bundle: true,
@@ -87,6 +88,12 @@ beforeAll(async () => {
   const db = await mf.getD1Database("DB", "collector");
   await db.exec(
     readFileSync("migrations/0001_aggregates.sql", "utf8").replace(/\n/g, " "),
+  );
+  await db.exec(
+    readFileSync("migrations/0002_census.sql", "utf8")
+      .split("\n")
+      .filter((line) => !line.startsWith("--"))
+      .join(" "),
   );
 }, 30000);
 afterAll(async () => {
@@ -291,4 +298,164 @@ describe("real Worker RPC, D1 and Access JWT", () => {
     ).toBe(0);
     expect((await stats("&app=wrong")).status).toBe(400);
   });
+});
+
+const validCensus = {
+  generation: 1,
+  accounts: 2,
+  projects: 3,
+  revisions: 4,
+  storedBytes: 100,
+  logicalBytes: 200,
+  unknownArtifacts: 0,
+  lt1mib: 1,
+  mib1to10: 1,
+  mib10to100: 1,
+  gte100mib: 0,
+};
+describe("expanded analytics", () => {
+  it("rejects arbitrary dimensions, invalid totals and cross-app census", () => {
+    expect(census(validCensus, "openzcad")).toEqual(validCensus);
+    for (const bad of [
+      { ...validCensus, userId: "private" },
+      { ...validCensus, storedBytes: NaN },
+      { ...validCensus, projects: 4 },
+      { ...validCensus, accounts: 0 },
+    ])
+      expect(census(bad, "openzcad")).toBeNull();
+    expect(census(validCensus, "openfea")).toBeNull();
+    expect(
+      metric(
+        { level: "basic", event: "error_mesh", bucket: "none" },
+        "openfea",
+      ),
+    ).toBeNull();
+    expect(
+      metric(
+        { level: "optional", event: "project_size", bucket: "private.step" },
+        "openfea",
+      ),
+    ).toBeNull();
+    expect(
+      metric(
+        {
+          level: "optional",
+          event: "feature_operation",
+          bucket: "feature.fillet",
+        },
+        "openzcad",
+      ),
+    ).not.toBeNull();
+    expect(
+      metric(
+        {
+          level: "optional",
+          event: "feature_operation",
+          bucket: "feature.fillet",
+        },
+        "openfea",
+      ),
+    ).toBeNull();
+  });
+  it("only accepts local report aggregates without identifiers or histories", () => {
+    const good = {
+      schema: 2,
+      app: "openfea",
+      rows: [{ event: "error_mesh", bucket: "none", count: 3 }],
+    };
+    expect(parseReport(good)).toEqual(good);
+    for (const bad of [
+      { ...good, email: "private" },
+      { ...good, rows: [{ ...good.rows[0], stack: "private" }] },
+      { ...good, rows: [{ event: "url", bucket: "none", count: 1 }] },
+      { ...good, rows: [...good.rows, ...good.rows] },
+      { ...good, rows: [{ ...good.rows[0], count: Infinity }] },
+    ])
+      expect(parseReport(bad)).toBeNull();
+  });
+  it("replaces cloud snapshots without summing accounts, rejects stale deliveries and hides them from Basic", async () => {
+    const bindings = await mf.getBindings<{
+      GLIMPSE: { snapshot(v: unknown): Promise<void> };
+    }>("cad");
+    await bindings.GLIMPSE.snapshot({ ...validCensus, generation: 20 });
+    await bindings.GLIMPSE.snapshot({
+      ...validCensus,
+      generation: 10,
+      accounts: 1,
+    });
+    await expect(async () => {
+      await bindings.GLIMPSE.snapshot({ ...validCensus, email: "private" });
+    }).rejects.toThrow();
+    const optional = (await (await stats("&level=optional")).json()) as {
+      census: { accounts: number; generation: number }[];
+    };
+    expect(optional.census).toHaveLength(1);
+    expect(optional.census[0]).toMatchObject({ accounts: 2, generation: 20 });
+    expect(
+      ((await (await stats()).json()) as { census: unknown[] }).census,
+    ).toEqual([]);
+    expect(
+      (
+        (await (await stats("&level=optional&app=openfea")).json()) as {
+          census: unknown[];
+        }
+      ).census,
+    ).toEqual([]);
+    const db = await mf.getD1Database("DB", "collector");
+    expect(
+      (
+        await db
+          .prepare("PRAGMA table_info(daily_census)")
+          .all<{ name: string }>()
+      ).results.map((r: { name: string }) => r.name),
+    ).toEqual([
+      "day",
+      "app",
+      "generation",
+      "accounts",
+      "projects",
+      "revisions",
+      "storedBytes",
+      "logicalBytes",
+      "unknownArtifacts",
+      "lt1mib",
+      "mib1to10",
+      "mib10to100",
+      "gte100mib",
+    ]);
+  });
+});
+
+it("rejects late snapshots across UTC days and purges expired snapshot metadata", async () => {
+  const probe = await mf.getBindings<{
+    RETENTION: {
+      at(value: unknown, day: string): Promise<void>;
+      run(): Promise<void>;
+    };
+  }>("cad");
+  const tomorrow = new Date(Date.now() + 86400000).toISOString().slice(0, 10);
+  await probe.RETENTION.at({ ...validCensus, generation: 19 }, tomorrow);
+  const db = await mf.getD1Database("DB", "collector");
+  expect(
+    await db
+      .prepare("SELECT count(*) AS n FROM daily_census WHERE day=?")
+      .bind(tomorrow)
+      .first(),
+  ).toEqual({ n: 0 });
+  const expired = new Date(Date.now() - 90 * 86400000)
+    .toISOString()
+    .slice(0, 10);
+  await db
+    .prepare(
+      "INSERT INTO daily_census SELECT ?,app,generation,accounts,projects,revisions,storedBytes,logicalBytes,unknownArtifacts,lt1mib,mib1to10,mib10to100,gte100mib FROM daily_census WHERE day=?",
+    )
+    .bind(expired, today)
+    .run();
+  await probe.RETENTION.run();
+  expect(
+    await db
+      .prepare("SELECT count(*) AS n FROM daily_census WHERE day=?")
+      .bind(expired)
+      .first(),
+  ).toEqual({ n: 0 });
 });
