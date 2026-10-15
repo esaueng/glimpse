@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
-import { BUCKETS, type Row } from "../src/contract";
+import { APPS, APP_NAMES, BUCKETS, type App, type Row } from "../src/contract";
 import "./style.css";
 const iso = (date: Date) => date.toISOString().slice(0, 10);
 const today = iso(new Date()),
@@ -14,6 +14,8 @@ const names: Record<string, string> = {
   export_failed: "Failed exports",
   solver_completed: "Completed solver runs",
   solver_failed: "Failed solver runs",
+  generation_completed: "Completed lattice generations",
+  generation_failed: "Failed lattice generations",
   operation_latency: "Local operation time",
   feature_used: "Feature actions",
   workflow_model: "Model step",
@@ -110,7 +112,9 @@ function Dashboard() {
       </header>
       <main>
         <h1>A little insight. Less data.</h1>
-        <p className="intro">Aggregate activity across OpenZCAD and OpenFEA.</p>
+        <p className="intro">
+          Aggregate activity across OpenZCAD, OpenFEA and OpenLattice3D.
+        </p>
         <form
           onSubmit={(e) => {
             e.preventDefault();
@@ -121,8 +125,9 @@ function Dashboard() {
             App
             <select value={app} onChange={(e) => setApp(e.target.value)}>
               <option value="all">All apps</option>
-              <option value="openzcad">OpenZCAD</option>
-              <option value="openfea">OpenFEA</option>
+              {APPS.map((id) => (
+                <option key={id} value={id}>{APP_NAMES[id]}</option>
+              ))}
             </select>
           </label>
           <label>
@@ -169,7 +174,7 @@ function Dashboard() {
           {loading
             ? "Loading aggregates…"
             : error ||
-              `${applied.app === "all" ? "All apps" : applied.app === "openzcad" ? "OpenZCAD" : "OpenFEA"} · ${applied.from} to ${applied.to}`}
+              `${applied.app === "all" ? "All apps" : APP_NAMES[applied.app as App]} · ${applied.from} to ${applied.to}`}
         </div>
         <section className="totals" aria-label="Totals">
           {[
@@ -179,14 +184,19 @@ function Dashboard() {
               optional ? value(count("export_completed")) : "Not collected",
             ],
             [
-              "Solver runs",
-              optional ? value(count("solver_completed")) : "Not collected",
+              applied.app === "openlattice3d"
+                ? "Lattice generations"
+                : applied.app === "all" ? "Solver / lattice runs" : "Solver runs",
+              optional
+                ? value(count("solver_completed") + count("generation_completed"))
+                : "Not collected",
             ],
             [
               "Errors",
               value(
                 optional
-                  ? count("export_failed") + count("solver_failed")
+                  ? count("export_failed") + count("solver_failed") +
+                    count("generation_failed")
                   : count("api_error"),
               ),
             ],
@@ -240,7 +250,7 @@ function Dashboard() {
                 </thead>
                 <tbody>
                   {rows.length ? (
-                    ["openzcad", "openfea"].flatMap((a) =>
+                    APPS.flatMap((a) =>
                       [
                         ...new Set(
                           rows.filter((r) => r.app === a).map((r) => r.event),
@@ -251,7 +261,7 @@ function Dashboard() {
                           <tr key={`${a}-${event}`}>
                             <td>
                               <span className="app-name">
-                                {a === "openzcad" ? "OpenZCAD" : "OpenFEA"}
+                                {APP_NAMES[a]}
                               </span>
                               {names[event] ?? event}
                             </td>
