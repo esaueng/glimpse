@@ -13,6 +13,8 @@ npm ci
 npm run check
 ```
 
-`npm run check` typechecks, runs real Worker/RPC/D1/auth regression tests, builds the dashboard and dry-runs the Worker bundle. `npm run dev` serves the dashboard UI only; the authenticated API needs `wrangler dev` and Access configuration. A missing API shows an error instead of fake data. Do not expose the Vite development server to the internet.
+`npm run check` typechecks, runs real Worker/RPC/D1/auth regression tests, removes generated `dist` output and proves a Wrangler deployment dry-run builds the dashboard and bundles the Worker without a separate build step. `npm run dev` serves the dashboard UI only; the authenticated API needs `wrangler dev` and Access configuration. A missing API shows an error instead of fake data. Do not expose the Vite development server to the internet.
 
 The event vocabulary is maintained in `src/contract.ts` and mirrored by the small app adapters. Changing the schema requires coordinated PRs and a privacy review. Backend API counters do not measure browser-local work or people; optional workflow counts cannot reconstruct individual workflows.
+
+Cloudflare Workers Builds must have **Build command: `npm run build`**, **Deploy command: `npx wrangler deploy`**, and **Root directory: `/`**. The Wrangler custom build also covers direct CLI use; see [setup](docs/SETUP.md#cloudflare-workers-builds).
