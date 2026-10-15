@@ -9,6 +9,11 @@
 - Browser QA uses the in-app browser with a locally signed test JWT and synthetic D1 counts. Verified combined totals (60 Basic requests), Optional totals (13 workspace opens, 2 exports, 3 solves), OpenZCAD-only isolation (8 opens, 0 exports/solves), date exclusion/empty state, native invalid-date validation, and no horizontal overflow at 390px.
 - Desktop viewport 1505×1045 and mobile 390×844; full-page screenshots inspected. The concept and desktop/mobile renders were compared with `view_image`.
 - Runtime dependencies have no npm audit findings at validation time. Miniflare 5 beta is a **development-only** dependency matching the version used by current Wrangler; no Miniflare code ships in the Worker.
+- Three commit-identity regressions accept the approved public GitHub merge display name only for its allowlisted login, and continue rejecting private addresses and unapproved names. All current commit metadata passes locally.
+
+## Hosted build configuration
+
+Cloudflare's Glimpse Production and Previews Base build commands were saved as `npm run build` on 15 October 2026; deploy remains `npx wrangler deploy`, preview remains `npx wrangler preview`, with root `/`. No build retry or deployment was triggered. GitHub Actions could not start either initial build-fix job because the account reported failed payments or an exhausted spending limit. This infrastructure block is distinct from local test results.
 
 ## Visual verification
 
