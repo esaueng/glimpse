@@ -876,5 +876,44 @@ footer {
   color: var(--error);
 }
 
-.load-status.quiet{position:absolute;width:1px;height:1px;min-height:0;overflow:hidden;clip-path:inset(50%);white-space:nowrap;}
-@media(min-width:761px){.panel-heading{min-height:40px;padding-top:8px;padding-bottom:8px}.histogram td{padding-top:6px;padding-bottom:6px}}
+.load-status.quiet {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  min-height: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+@media (min-width: 761px) {
+  .panel-heading {
+    min-height: 40px;
+    padding-top: 8px;
+    padding-bottom: 8px;
+  }
+  .histogram td {
+    padding-top: 6px;
+    padding-bottom: 6px;
+  }
+}
+.legend .lattice-key:before {
+  background: #f2c979;
+}
+.lattice-series {
+  stroke: #f2c979;
+  fill: #f2c979;
+}
+.lattice-series polyline {
+  fill: none;
+}
+.completed-value {
+  font-size: 11px;
+  color: var(--muted);
+  max-width: 180px;
+}
+.activity-panel .panel-heading {
+  flex-wrap: wrap;
+}
+.legend {
+  flex-wrap: wrap;
+}

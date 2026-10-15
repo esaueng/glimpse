@@ -56,6 +56,11 @@ export class OpenFEAIngest extends WorkerEntrypoint<Env> {
     await record(this.env, "openfea", value);
   }
 }
+export class OpenLattice3DIngest extends WorkerEntrypoint<Env> {
+  async record(value: unknown) {
+    await record(this.env, "openlattice3d", value);
+  }
+}
 const headers = {
   "Cache-Control": "private, no-store",
   "X-Content-Type-Options": "nosniff",

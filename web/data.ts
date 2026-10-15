@@ -1,4 +1,4 @@
-import type { App, Row } from "../src/contract";
+import { APPS, APP_NAMES, type App, type Row } from "../src/contract";
 import type { CensusRow } from "../src/expanded";
 export type Range = { app: string; level: string; from: string; to: string };
 export type Stats = {
@@ -8,7 +8,7 @@ export type Stats = {
   receivedAt: string;
 };
 export const appName = (app: string) =>
-  app === "openzcad" ? "OpenZCAD" : app === "openfea" ? "OpenFEA" : "All apps";
+  APPS.includes(app as App) ? APP_NAMES[app as App] : "All apps";
 export const number = (value: number) => value.toLocaleString();
 export function bytes(value: number): string {
   if (value < 1024) return `${number(value)} B`;
@@ -25,11 +25,12 @@ export function total(rows: Row[], event: string, app?: App): number {
     0,
   );
 }
+export const isDiagnostic = (row: Row) =>
+  row.event.startsWith("error_") ||
+  ["export_failed", "solver_failed", "generation_failed"].includes(row.event);
 export function diagnosticCount(rows: Row[], app?: App) {
   return rows.reduce(
-    (n, r) =>
-      n +
-      (r.event.startsWith("error_") && (!app || r.app === app) ? r.count : 0),
+    (n, r) => n + (isDiagnostic(r) && (!app || r.app === app) ? r.count : 0),
     0,
   );
 }
@@ -76,6 +77,7 @@ export function dailySeries(data: Stats, event: string) {
     day,
     openzcad: totals.get(`${day}:openzcad`) ?? 0,
     openfea: totals.get(`${day}:openfea`) ?? 0,
+    openlattice3d: totals.get(`${day}:openlattice3d`) ?? 0,
   }));
 }
 export function latestCensus(rows: CensusRow[]): CensusRow | undefined {
