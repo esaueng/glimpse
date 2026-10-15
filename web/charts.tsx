@@ -1,6 +1,6 @@
 import { useCompact } from "./useCompact";
 import type { Row } from "../src/contract";
-import { BUCKETS } from "../src/contract";
+import { APPS, APP_NAMES, BUCKETS } from "../src/contract";
 import { dailySeries, number, type Stats } from "./data";
 export const sizeLabels = ["<1 MiB", "1–10 MiB", "10–100 MiB", "≥100 MiB"];
 export const timingLabels = [
@@ -67,19 +67,34 @@ export function Activity({ data, event }: { data: Stats; event: string }) {
     left = compact ? 35 : 50,
     right = width - 20;
   const series = dailySeries(data, event),
-    max = Math.max(1, ...series.flatMap((r) => [r.openzcad, r.openfea]));
+    max = Math.max(1, ...series.flatMap((r) => APPS.map((app) => r[app])));
   const top = Math.ceil(max / 4) * 4;
   const x = (i: number) =>
       left + (i / Math.max(1, series.length - 1)) * (right - left),
-    y = (value: number) => (compact ? 162 : 122) - (value / top) * (compact ? 134 : 98);
-  const shown = ["openzcad", "openfea"] as const;
+    y = (value: number) =>
+      (compact ? 162 : 122) - (value / top) * (compact ? 134 : 98);
+  const shown = APPS;
   return (
     <section className="panel activity-panel">
       <div className="panel-heading">
         <h2>Daily activity</h2>
         <div className="legend">
-          <span className="cad-key">OpenZCAD</span>
-          <span className="fea-key">OpenFEA</span>
+          {APPS.filter(
+            (app) => data.range.app === "all" || data.range.app === app,
+          ).map((app) => (
+            <span
+              key={app}
+              className={
+                app === "openzcad"
+                  ? "cad-key"
+                  : app === "openfea"
+                    ? "fea-key"
+                    : "lattice-key"
+              }
+            >
+              {APP_NAMES[app]}
+            </span>
+          ))}
         </div>
       </div>
       <p className="chart-caption">
@@ -112,7 +127,13 @@ export function Activity({ data, event }: { data: Stats; event: string }) {
           .map((app) => (
             <g
               key={app}
-              className={app === "openzcad" ? "cad-series" : "fea-series"}
+              className={
+                app === "openzcad"
+                  ? "cad-series"
+                  : app === "openfea"
+                    ? "fea-series"
+                    : "lattice-series"
+              }
             >
               <polyline
                 fill="none"
@@ -143,7 +164,7 @@ export function Activity({ data, event }: { data: Stats; event: string }) {
             <text
               key={i}
               x={x(i)}
-              y={height-10}
+              y={height - 10}
               textAnchor={
                 i === 0 ? "start" : i === series.length - 1 ? "end" : "middle"
               }
@@ -152,7 +173,7 @@ export function Activity({ data, event }: { data: Stats; event: string }) {
             </text>
           ))}
       </svg>
-      {!series.some((r) => r.openzcad || r.openfea) && (
+      {!series.some((r) => APPS.some((app) => r[app])) && (
         <p className="empty-inline">No activity in this date range.</p>
       )}
       <details className="data-disclosure">
@@ -169,6 +190,7 @@ export function Activity({ data, event }: { data: Stats; event: string }) {
                 <th>Date</th>
                 <th>OpenZCAD</th>
                 <th>OpenFEA</th>
+                <th>OpenLattice3D</th>
               </tr>
             </thead>
             <tbody>
@@ -177,6 +199,7 @@ export function Activity({ data, event }: { data: Stats; event: string }) {
                   <td>{r.day}</td>
                   <td className="numeric">{number(r.openzcad)}</td>
                   <td className="numeric">{number(r.openfea)}</td>
+                  <td className="numeric">{number(r.openlattice3d)}</td>
                 </tr>
               ))}
             </tbody>

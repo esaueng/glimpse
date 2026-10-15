@@ -54,8 +54,8 @@ describe("dashboard measurement semantics", () => {
         "workspace_opened",
       ),
     ).toEqual([
-      { day: "2026-10-14", openzcad: 0, openfea: 0 },
-      { day: "2026-10-15", openzcad: 0, openfea: 4 },
+      { day: "2026-10-14", openzcad: 0, openfea: 0, openlattice3d: 0 },
+      { day: "2026-10-15", openzcad: 0, openfea: 4, openlattice3d: 0 },
     ]);
   });
   it("uses the latest snapshot without summing account or storage stocks across days", () => {

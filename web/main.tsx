@@ -1,12 +1,13 @@
 import React, { useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
-import { dateRange, type App, type Row } from "../src/contract";
+import { APPS, dateRange, type App, type Row } from "../src/contract";
 import { PARTS, SIZES } from "../src/expanded";
 import { Activity, Histogram, Timing, sizeLabels } from "./charts";
 import {
   appName,
   bytes,
   diagnosticCount,
+  isDiagnostic,
   grouped,
   latestCensus,
   number,
@@ -44,10 +45,7 @@ function readLocation(): { range: Range; view: View } {
   };
 }
 function Codes({ rows, limit }: { rows: Row[]; limit?: number }) {
-  const values = grouped(rows, (r) => r.event.startsWith("error_")).slice(
-    0,
-    limit,
-  );
+  const values = grouped(rows, isDiagnostic).slice(0, limit);
   return (
     <div
       className="table-scroll"
@@ -216,7 +214,7 @@ function Dashboard() {
           "Opted-in cloud accounts",
           snapshot
             ? number(snapshot.accounts)
-            : applied.app === "openfea"
+            : !["all", "openzcad"].includes(applied.app)
               ? "N/A"
               : "—",
         ],
@@ -224,7 +222,7 @@ function Dashboard() {
           "Cloud projects",
           snapshot
             ? number(snapshot.projects)
-            : applied.app === "openfea"
+            : !["all", "openzcad"].includes(applied.app)
               ? "N/A"
               : "—",
         ],
@@ -232,7 +230,7 @@ function Dashboard() {
           "Stored cloud data",
           snapshot
             ? bytes(snapshot.storedBytes)
-            : applied.app === "openfea"
+            : !["all", "openzcad"].includes(applied.app)
               ? "N/A"
               : "—",
         ],
@@ -245,7 +243,7 @@ function Dashboard() {
         ["Solver runs", "Opt-in only"],
       ];
   const scopes = optional
-    ? `Opted-in users only. No unique visitor tracking. ${applied.app === "openfea" ? "OpenFEA has no cloud account or project inventory." : snapshot ? `OpenZCAD cloud snapshot: ${snapshot.day} UTC.` : "No cloud snapshot received in this range."} Diagnostic counts are events.`
+    ? `Opted-in users only. No unique visitor tracking. ${!["all", "openzcad"].includes(applied.app) ? `Cloud census is not implemented for ${appName(applied.app)}.` : snapshot ? `OpenZCAD cloud snapshot: ${snapshot.day} UTC.` : "No cloud snapshot received in this range."} Diagnostic counts are events.`
     : "Basic activity · backend requests, server errors and response times. Expanded local and cloud statistics require opt-in.";
   return (
     <>
@@ -341,6 +339,7 @@ function Dashboard() {
                 <option value="all">All apps</option>
                 <option value="openzcad">OpenZCAD</option>
                 <option value="openfea">OpenFEA</option>
+                <option value="openlattice3d">OpenLattice3D</option>
               </select>
             </label>
             <label>
@@ -379,7 +378,10 @@ function Dashboard() {
             </button>
           </form>
         </details>
-        <p className="scope-notice">{scopes} Applied: {appName(applied.app)} · {applied.from} to {applied.to} UTC.</p>
+        <p className="scope-notice">
+          {scopes} Applied: {appName(applied.app)} · {applied.from} to{" "}
+          {applied.to} UTC.
+        </p>
         <div
           className={`load-status ${error ? "error-message" : !loading ? "quiet" : ""}`}
           role="status"
@@ -420,18 +422,25 @@ function Dashboard() {
                 <div className="panel-heading">
                   <h2>Application totals</h2>
                 </div>
-                <table>
-                  <thead>
-                    <tr>
-                      <th>App</th>
-                      <th>Activity</th>
-                      <th>Errors</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {(["openzcad", "openfea"] as App[])
-                      .filter((a) => applied.app === "all" || applied.app === a)
-                      .map((a) => (
+                <div
+                  className="table-scroll"
+                  role="region"
+                  aria-label="Application totals"
+                  tabIndex={0}
+                >
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>App</th>
+                        <th>Activity</th>
+                        <th>Errors</th>
+                        <th>Completed</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {APPS.filter(
+                        (a) => applied.app === "all" || applied.app === a,
+                      ).map((a) => (
                         <tr key={a}>
                           <td>{appName(a)}</td>
                           <td className="numeric">
@@ -444,17 +453,23 @@ function Dashboard() {
                                 : total(rows, "api_error", a),
                             )}
                           </td>
+                          <td className="completed-value">
+                            {optional
+                              ? `${number(total(rows, a === "openfea" ? "solver_completed" : a === "openlattice3d" ? "generation_completed" : "export_completed", a))} ${a === "openfea" ? "solves" : a === "openlattice3d" ? "generations" : "exports"}${a === "openzcad" ? "" : ` · ${number(total(rows, "export_completed", a))} exports`}`
+                              : "Opt-in only"}
+                          </td>
                         </tr>
                       ))}
-                  </tbody>
-                </table>
+                    </tbody>
+                  </table>
+                </div>
                 <p className="panel-note">
                   {optional
-                    ? "Workspace opens and diagnostic signals. Repeated activity is counted repeatedly."
+                    ? `Workspace opens and diagnostic signals. ${number(total(rows, "solver_completed") + total(rows, "generation_completed"))} completed runs · ${number(total(rows, "export_completed"))} completed exports.`
                     : "Backend API requests and HTTP 5xx outcomes."}
                 </p>
                 <p className="panel-note">
-                  OpenFEA cloud accounts: not supported.
+                  Cloud account statistics are implemented for OpenZCAD only.
                 </p>
               </section>
             </div>
@@ -525,7 +540,7 @@ function Dashboard() {
                   <dd>
                     {snapshot
                       ? bytes(snapshot.storedBytes)
-                      : applied.app === "openfea"
+                      : !["all", "openzcad"].includes(applied.app)
                         ? "N/A"
                         : "—"}
                   </dd>

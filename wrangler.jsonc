@@ -5,7 +5,7 @@
   "compatibility_date": "2026-10-15",
   "compatibility_flags": ["nodejs_compat"],
   "workers_dev": false,
-  "preview_urls": false,
+  "preview_urls": true,
   "routes": [{ "pattern": "glimpse.esau.app", "custom_domain": true }],
   "build": { "command": "npm run build" },
   "assets": {
@@ -24,6 +24,20 @@
   "vars": {
     "ACCESS_ISSUER": "https://esau.cloudflareaccess.com",
     "ACCESS_AUD": "1207bdb7d60dadda07f486a5e3547c4c74ceb8688dc42a77002f64d29e2eebcb",
+  },
+  // Preview data and JWT audience are independent of production.
+  "previews": {
+    "vars": {
+      "ACCESS_ISSUER": "https://esau.cloudflareaccess.com",
+      "ACCESS_AUD": "bbf706b5fc360ae01633aa2f477418193ea388e5870ad9124074b3320642a699"
+    },
+    "d1_databases": [
+      {
+        "binding": "DB",
+        "database_name": "glimpse-preview",
+        "database_id": "63f504b5-96f7-4986-b0b7-d4b6f55aca1e"
+      }
+    ]
   },
   "triggers": { "crons": ["31 3 * * *"] },
   "observability": {

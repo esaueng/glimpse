@@ -63,7 +63,7 @@ are not imported into the aggregate database and disappear on reload/clear.
 ## Rollout order and verification boundary
 
 1. Review the updated notices and deployment-specific privacy/legal basis.
-2. Authorize and apply Glimpse migration `0002_census.sql`; deploy the service.
+2. Authorize and apply Glimpse migration `0003_census.sql`; deploy the service.
 3. Authorize and apply OpenZCAD migration `0028_glimpse_consent.sql`; deploy its
    integration. OpenFEA needs no new database. Keep existing collection switches
    off until the end-to-end staging checks pass. The prior authorization for
@@ -80,3 +80,14 @@ Service and app statistics are best effort, not billing data. Custom clients can
 spoof allowed browser events; rate limits and lost sends can bias the sample.
 Small opted-in populations can be sensitive even without names. Restrict access,
 limit retention, and never claim these aggregates are legally anonymous.
+
+## Preserved existing integrations
+
+Current main also supports OpenLattice3D and isolated authenticated Preview
+databases. This revision preserves those entrypoints, app filters, generation
+outcomes, tables, migrations and environment boundaries. The expanded v2 wire
+contract and local reports currently apply to OpenZCAD/OpenFEA only; other apps
+cannot send new detailed fields. Legacy failure outcomes remain visible as fixed
+diagnostic categories, so one issue can produce both an outcome and a diagnostic
+signal. Preview environments need the new census migration too, with separate
+authorization; they never bind the production database or audience.
