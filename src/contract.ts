@@ -13,6 +13,8 @@ export const OPTIONAL = [
   "export_failed",
   "solver_completed",
   "solver_failed",
+  "generation_completed",
+  "generation_failed",
   "workflow_model",
   "workflow_mesh",
   "workflow_setup",
@@ -21,7 +23,17 @@ export const OPTIONAL = [
   "feature_used",
   "operation_latency",
 ] as const;
-export type App = "openzcad" | "openfea";
+export const APPS = ["openzcad", "openfea", "openlattice3d"] as const;
+export type App = (typeof APPS)[number];
+export const APP_NAMES: Record<App, string> = {
+  openzcad: "OpenZCAD",
+  openfea: "OpenFEA",
+  openlattice3d: "OpenLattice3D",
+};
+const LATTICE_OPTIONAL = [
+  "workspace_opened", "export_completed", "export_failed",
+  "generation_completed", "generation_failed", "operation_latency",
+];
 export type Level = "basic" | "optional";
 export interface Metric {
   level: Level;
@@ -42,6 +54,13 @@ export function metric(value: unknown, app: App): Metric | null {
   const allowed: readonly string[] =
     v.level === "basic" ? BASIC : v.level === "optional" ? OPTIONAL : [];
   if (!allowed.includes(v.event)) return null;
+  if (
+    (app === "openlattice3d" &&
+      v.level === "optional" &&
+      !LATTICE_OPTIONAL.includes(v.event)) ||
+    (app !== "openlattice3d" && v.event.startsWith("generation_"))
+  )
+    return null;
   if (
     app === "openzcad" &&
     (v.event.startsWith("solver_") ||
@@ -85,7 +104,7 @@ export function dateRange(
     from > to ||
     to > today.toISOString().slice(0, 10) ||
     (Date.parse(to) - Date.parse(from)) / 86400000 > 89 ||
-    !["all", "openzcad", "openfea"].includes(app) ||
+    !["all", ...APPS].includes(app) ||
     !["basic", "optional"].includes(level)
   )
     return null;

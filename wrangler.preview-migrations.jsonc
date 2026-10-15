@@ -1,0 +1,13 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "glimpse-preview-migrations",
+  "compatibility_date": "2026-10-15",
+  "d1_databases": [
+    {
+      "binding": "PREVIEW_DB",
+      "database_name": "glimpse-preview",
+      "database_id": "63f504b5-96f7-4986-b0b7-d4b6f55aca1e",
+      "migrations_dir": "migrations"
+    }
+  ]
+}

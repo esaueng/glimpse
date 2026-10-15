@@ -1,6 +1,6 @@
 # Glimpse
 
-A small, protected analytics dashboard for OpenZCAD and OpenFEA. One Cloudflare Worker, one D1 table of daily counters, and two fixed service-binding entrypoints. No public ingest endpoint or raw event history.
+A small, protected analytics dashboard for OpenZCAD, OpenFEA and OpenLattice3D. One Cloudflare Worker, one D1 table of daily counters, and three fixed service-binding entrypoints. No public ingest endpoint or raw event history.
 
 - Basic statistics: server-side API activity, 5xx errors, coarse response times.
 - Optional usage: explicit opt-in only; browser-local exports, solver outcomes, feature actions and workflow-step counts. Withdrawal stops future collection immediately. Optional figures represent opted-in users only.
@@ -20,3 +20,7 @@ npm run check
 The event vocabulary is maintained in `src/contract.ts` and mirrored by the small app adapters. Changing the schema requires coordinated PRs and a privacy review. Backend API counters do not measure browser-local work or people; optional workflow counts cannot reconstruct individual workflows.
 
 Cloudflare Workers Builds must have **Build command: `npm run build`**, **Deploy command: `npx wrangler deploy`**, and **Root directory: `/`**. The Wrangler custom build also covers direct CLI use; see [setup](docs/SETUP.md#cloudflare-workers-builds).
+
+OpenLattice3D support requires the additive `0002_openlattice3d.sql` migration before enabling that app. It preserves existing aggregates while expanding the fixed app allowlist. Production application of this migration and app activation remain separate authorized rollout steps; see [setup](docs/SETUP.md#openlattice3d-rollout).
+
+Branch previews have a separate D1 database and Access audience, with the same owner-only access policy. See [Preview setup](docs/SETUP.md#isolated-branch-previews).
