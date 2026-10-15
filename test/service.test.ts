@@ -63,6 +63,19 @@ beforeAll(async () => {
             ),
         },
         {
+          name: "preview-collector",
+          modules: true,
+          script: bundle.outputFiles[0].text,
+          compatibilityDate: "2026-10-15",
+          compatibilityFlags: ["nodejs_compat"],
+          d1Databases: { DB: "preview-db" },
+          bindings: { ACCESS_ISSUER: issuer, ACCESS_AUD: "preview-dashboard" },
+          serviceBindings: { ASSETS: () => new Response("<h1>Preview</h1>") },
+          outboundService: () => new Response(JSON.stringify({ keys: [jwk] }), {
+            headers: { "Content-Type": "application/json" },
+          }),
+        },
+        {
           name: "cad",
           modules: true,
           script: caller,
@@ -70,6 +83,7 @@ beforeAll(async () => {
           serviceBindings: {
             GLIMPSE: { name: "collector", entrypoint: "OpenZCADIngest" },
             RETENTION: { name: "collector", entrypoint: "CronProbe" },
+            PREVIEW: "preview-collector",
           },
         },
         {
@@ -292,6 +306,36 @@ describe("real Worker RPC, D1 and Access JWT", () => {
     const combined = await (await stats("&level=optional")).json() as { rows: { app: string }[] };
     expect(new Set(combined.rows.map((r) => r.app))).toEqual(new Set(["openzcad", "openfea", "openlattice3d"]));
     await expect(db.prepare("INSERT INTO daily_counts VALUES(?,?,?,?,?,?)").bind(today, "unknown", "basic", "api_request", "none", 1).run()).rejects.toThrow();
+  });
+  it("rejects cross-environment JWTs and reads only the Preview database", async () => {
+    const previewToken = await new SignJWT({})
+      .setProtectedHeader({ alg: "RS256", kid: "test" })
+      .setIssuer(issuer).setAudience("preview-dashboard").setSubject("test")
+      .setIssuedAt().setExpirationTime("5m").sign(privateKey);
+    const { PREVIEW: preview } = await mf.getBindings<{ PREVIEW: { fetch: typeof fetch } }>("cad");
+    for (const path of ["/", "/api/stats"]) {
+      expect((await preview.fetch(`https://preview.test${path}`)).status).toBe(401);
+      expect((await preview.fetch(`https://preview.test${path}`, {
+        headers: { "Cf-Access-Jwt-Assertion": token },
+      })).status).toBe(401);
+      expect((await mf.dispatchFetch(`https://glimpse.test${path}`, {
+        headers: { "Cf-Access-Jwt-Assertion": previewToken },
+      })).status).toBe(401);
+    }
+    const db = await mf.getD1Database("DB", "preview-collector");
+    for (const migration of ["0001_aggregates.sql", "0002_openlattice3d.sql"])
+      await db.exec(readFileSync(`migrations/${migration}`, "utf8")
+        .replace(/--[^\n]*/g, "").replace(/\n/g, " "));
+    await db.prepare("INSERT INTO daily_counts VALUES(?,?,?,?,?,?)")
+      .bind(today, "openlattice3d", "basic", "api_request", "none", 13).run();
+    const response = await preview.fetch(
+      `https://preview.test/api/stats?from=${today}&to=${today}`, {
+        headers: { "Cf-Access-Jwt-Assertion": previewToken },
+      });
+    expect(response.status).toBe(200);
+    expect((await response.json() as { rows: { count: number }[] }).rows.map((r) => r.count)).toEqual([13]);
+    const production = await (await stats("&app=openlattice3d")).json() as { rows: unknown[] };
+    expect(production.rows).toEqual([]);
   });
   it("hides expired aggregates even if the retention cron is delayed", async () => {
     const db = await mf.getD1Database("DB", "collector");
