@@ -1,4 +1,18 @@
 :root {
+  color-scheme: dark;
+  --canvas: #10151f;
+  --surface: #192332;
+  --raised: #202c3c;
+  --text: #e8eef7;
+  --muted: #a2b0c4;
+  --border: #334154;
+  --control-border: #60718a;
+  --grid: #253041;
+  --accent: #56d8be;
+  --accent-hover: #7be4ce;
+  --on-accent: #082921;
+  --focus: #94f3df;
+  --error: #ff97a6;
   font-family:
     Inter,
     ui-sans-serif,
@@ -6,8 +20,8 @@
     BlinkMacSystemFont,
     "Segoe UI",
     sans-serif;
-  color: #101936;
-  background: #fff;
+  color: var(--text);
+  background: var(--canvas);
   font-synthesis: none;
   font-size: 16px;
 }
@@ -24,7 +38,7 @@ header {
   align-items: center;
   justify-content: space-between;
   padding: 24px 0 20px;
-  border-bottom: 1px solid #dce2e9;
+  border-bottom: 1px solid var(--border);
 }
 header strong {
   font-size: 26px;
@@ -34,7 +48,7 @@ header span,
 .intro,
 .scope,
 footer {
-  color: #61718c;
+  color: var(--muted);
 }
 h1 {
   font-size: 44px;
@@ -68,9 +82,9 @@ button {
   font: inherit;
   border-radius: 4px;
   padding: 10px 12px;
-  border: 1px solid #cfd8e2;
+  border: 1px solid var(--control-border);
   min-height: 42px;
-  background: white;
+  background: var(--surface);
   color: inherit;
   min-width: 0;
 }
@@ -78,15 +92,15 @@ select {
   width: 100%;
 }
 button {
-  background: #087f72;
-  color: white;
-  border-color: #087f72;
+  background: var(--accent);
+  color: var(--on-accent);
+  border-color: var(--accent);
   cursor: pointer;
   padding-left: 24px;
   padding-right: 24px;
 }
 button:hover {
-  background: #056258;
+  background: var(--accent-hover);
 }
 button:disabled {
   opacity: 0.6;
@@ -95,7 +109,7 @@ button:disabled {
 button:focus-visible,
 input:focus-visible,
 select:focus-visible {
-  outline: 3px solid #6bcbbc;
+  outline: 3px solid var(--focus);
   outline-offset: 3px;
 }
 .scope {
@@ -105,11 +119,11 @@ select:focus-visible {
 .status {
   font-size: 13px;
   min-height: 24px;
-  color: #61718c;
+  color: var(--muted);
   margin: 8px 0 18px;
 }
 .error {
-  color: #a82936;
+  color: var(--error);
 }
 .totals {
   display: grid;
@@ -118,7 +132,7 @@ select:focus-visible {
 }
 .totals > div {
   padding: 0 32px;
-  border-left: 1px solid #dce2e9;
+  border-left: 1px solid var(--border);
 }
 .totals > div:first-child {
   padding-left: 0;
@@ -127,7 +141,7 @@ select:focus-visible {
 .totals span {
   display: block;
   font-size: 15px;
-  color: #52617d;
+  color: var(--muted);
 }
 .totals strong {
   display: block;
@@ -151,21 +165,21 @@ h2 {
 h2 small {
   font-size: 13px;
   font-weight: 400;
-  color: #61718c;
+  color: var(--muted);
   letter-spacing: 0;
   margin-left: 8px;
 }
 .plot {
   height: 190px;
   position: relative;
-  border-bottom: 1px solid #cfd8e2;
-  border-left: 1px solid #cfd8e2;
+  border-bottom: 1px solid var(--border);
+  border-left: 1px solid var(--border);
   background: repeating-linear-gradient(
     to top,
     transparent 0,
     transparent 37px,
-    #e7ecf2 37px,
-    #e7ecf2 38px
+    var(--grid) 37px,
+    var(--grid) 38px
   );
 }
 .bars {
@@ -182,7 +196,7 @@ h2 small {
   align-items: end;
 }
 .bar {
-  background: #087f72;
+  background: var(--accent);
   width: 100%;
   min-width: 1px;
   border-radius: 2px 2px 0 0;
@@ -193,14 +207,14 @@ h2 small {
   display: grid;
   place-items: center;
   font-size: 14px;
-  color: #61718c;
+  color: var(--muted);
   margin: 0;
 }
 .axis {
   display: flex;
   justify-content: space-between;
   font-size: 12px;
-  color: #61718c;
+  color: var(--muted);
   margin: 10px 0 36px;
 }
 .details {
@@ -209,7 +223,7 @@ h2 small {
   gap: 48px;
 }
 .table-wrap {
-  border: 1px solid #dce2e9;
+  border: 1px solid var(--border);
   border-radius: 4px;
   overflow: hidden;
 }
@@ -222,13 +236,13 @@ th,
 td {
   text-align: left;
   padding: 12px 14px;
-  border-bottom: 1px solid #e7ecf2;
+  border-bottom: 1px solid var(--grid);
 }
 tr:last-child td {
   border-bottom: 0;
 }
 th {
-  background: #f4f6f8;
+  background: var(--surface);
   font-weight: 500;
 }
 th:last-child,
@@ -238,10 +252,10 @@ td:last-child {
 .table-empty {
   text-align: center !important;
   height: 130px;
-  color: #61718c;
+  color: var(--muted);
 }
 .app-name {
-  color: #61718c;
+  color: var(--muted);
   display: block;
   font-size: 12px;
   margin-bottom: 3px;
@@ -256,25 +270,25 @@ td:last-child {
   gap: 12px;
   font-size: 13px;
   margin: 15px 0;
-  color: #61718c;
+  color: var(--muted);
 }
 .hist-row > div {
   height: 12px;
-  background: #f0f3f6;
+  background: var(--raised);
 }
 .hist-row i {
   display: block;
   height: 100%;
-  background: #087f72;
+  background: var(--accent);
   border-radius: 2px;
 }
 .hist-row b {
   text-align: right;
   font-weight: 400;
-  color: #101936;
+  color: var(--text);
 }
 footer {
-  border-top: 1px solid #dce2e9;
+  border-top: 1px solid var(--border);
   font-size: 13px;
   margin: 40px 0 0;
   padding: 18px 0 24px;
