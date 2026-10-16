@@ -66,8 +66,8 @@ third-app legacy counts and Preview/production separation remain supported.
 
 Local service validation: `npm run check` passes **15 tests** across real
 Worker/RPC/D1/Access, preview configuration and dashboard measurement semantics,
-plus typechecking and a clean Wrangler deployment dry-run. Three commit-metadata
-regressions pass. Tests cover strict event/report/census schemas, extra private
+plus typechecking and a clean Wrangler deployment dry-run. Four privacy-policy
+regressions pass after synchronizing the newly merged CI policy. Tests cover strict event/report/census schemas, extra private
 fields, concurrent app-separated counts, stock replacement rather than summing,
 out-of-order deliveries across UTC days, retention, and environment JWT isolation.
 
