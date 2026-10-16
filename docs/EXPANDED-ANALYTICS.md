@@ -47,7 +47,11 @@ OpenZCAD, contains only its existing user key and expiry, and is never forwarded
 to Glimpse. No individual analytics history is stored. It is not inferred from
 browser consent, sign-in, other devices or the other app. Its checkbox reads the
 server state, displays expiry, and reports save failure honestly. Withdrawal
-remains available when collection is disabled. Account withdrawal takes effect when the server acknowledges it; a failed/offline attempt leaves the last server permission in force, which the UI states explicitly. Erasing accounts are excluded;
+remains available when collection is disabled. Acknowledgement confirms account
+withdrawal. If the request or its reply fails, the outcome is unconfirmed: the
+request may already have reached the server. Refresh the server state and retry
+as needed; the UI must not claim the old permission definitely remains in force.
+Erasing accounts are excluded;
 permission rows cascade when an account is deleted. DNT/GPC suppress browser
 sends; revoke the separate account permission in Settings to stop account totals.
 Already-published snapshots are historical aggregates with 90-day retention.
@@ -61,6 +65,13 @@ rejects unknown keys, raw messages, duplicate rows and oversized files. Reports
 are not imported into the aggregate database and disappear on reload/clear.
 
 ## Rollout order and verification boundary
+
+The owner subsequently authorized this rollout explicitly. All three service/app
+PRs are merged and deployed, the required Production and isolated Preview
+migrations are applied. Collection was subsequently enabled for all three apps,
+with browser analytics still requiring opt-in. See the current
+[validation record](VALIDATION.md) for live checks and remaining limits.
+The sequence below also applies when preparing another installation.
 
 1. Review the updated notices and deployment-specific privacy/legal basis.
 2. Authorize and apply Glimpse migration `0003_census.sql`; deploy the service.
