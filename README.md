@@ -10,6 +10,8 @@ Primary domain: [glimpse.esau.app](https://glimpse.esau.app), protected by Cloud
 
 See [setup](docs/SETUP.md), [privacy and consent limits](docs/PRIVACY.md), and [validation status](docs/VALIDATION.md). GitHub Actions CI validates without deploying; the existing Cloudflare Workers Builds integration deploys main pushes.
 
+See the [public-source privacy review](docs/PUBLICATION.md) for history-scan results, publication limits and the commit-privacy/secret-scan CI checks.
+
 ```sh
 npm ci
 npm run check
