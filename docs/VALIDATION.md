@@ -1,6 +1,35 @@
 # Validation and rollout record
 
-## Current production status — 16 October 2026 UTC
+## Latest live verification — 16 October 2026 UTC
+
+Collection was subsequently enabled with owner authorization, while optional
+browser analytics remained consent-gated. The production configurations on main
+for OpenZCAD, OpenFEA and OpenLattice3D now set both collection flags to true;
+this enables ingestion, not browser consent. Glimpse has received optional
+workspace activity from all three apps.
+
+The OpenZCAD local-only cloud-load fix in
+[#693](https://github.com/esaueng/OpenZCAD/pull/693) is merged and deployed.
+Production build metadata returned commit
+`c8e3ec650ad9c095a486221ab1f016e05594cf6a`. At 04:27 UTC, a signed-in Chrome
+session with optional analytics already opted in reopened the built-in Mounting
+Bracket example after a full reload. It remained local-only, offering **Save to
+my account**. Across that reload, Glimpse's OpenZCAD `workspace_opened` total
+increased from 10 to 11, while `error_cloud_load` and `cloud_status / other`
+both remained at five. Those historical errors were retained. The consent
+choice was left unchanged, and no private model was edited or uploaded.
+
+The dashboard's optional view also showed one OpenFEA workspace open and two
+OpenLattice3D workspace opens. These are anonymous aggregate event counts,
+not distinct visitors or a per-project activity trail. A nonempty OpenZCAD
+account snapshot was visible; expiry/withdrawal propagation and retention cron
+execution still require separate production verification.
+
+## Initial deployment snapshot — 16 October 2026 UTC
+
+This section records the earlier deployment before collection was enabled.
+Its version IDs, empty counters and disabled flags describe that snapshot;
+the live verification above supersedes those collection-status claims.
 
 The owner explicitly authorized merging all three reviewed PRs, applying their
 required migrations and deploying the updates. All three are merged; their
@@ -61,9 +90,9 @@ existing account/project contents were exported.
   navigation to `/healthz` renders the frontend fallback; the direct origin probe
   verifies the health endpoint separately.
 
-### Still awaiting production verification
+### Verification limits at the initial deployment
 
-Collection remains disabled. Live opted-in event delivery and nonzero aggregate
+At this initial deployment, collection remained disabled. Live opted-in event delivery and nonzero aggregate
 isolation, signed-in account permission/expiry/withdrawal propagation, hourly
 census delivery and retention cron execution have not been verified in production.
 The local/hosted regressions below cover collection contracts and handlers in test environments.
@@ -76,7 +105,7 @@ grant consent.
 
 The entries below record earlier stages and their limitations at that time.
 Their references to pending deployment, migrations or payment-blocked CI are
-historical; the current production status above supersedes those rollout claims.
+historical; the newer verification records above supersede those rollout claims.
 
 15 October 2026. The owner authorized dedicated production database setup, the initial migration, and Glimpse deployment. The protected dashboard is live. No app analytics activation was performed.
 

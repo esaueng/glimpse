@@ -68,8 +68,9 @@ are not imported into the aggregate database and disappear on reload/clear.
 
 The owner subsequently authorized this rollout explicitly. All three service/app
 PRs are merged and deployed, the required Production and isolated Preview
-migrations are applied, and both apps' collection switches remain off. See the
-current [validation record](VALIDATION.md) for live checks and remaining limits.
+migrations are applied. Collection was subsequently enabled for all three apps,
+with browser analytics still requiring opt-in. See the current
+[validation record](VALIDATION.md) for live checks and remaining limits.
 The sequence below also applies when preparing another installation.
 
 1. Review the updated notices and deployment-specific privacy/legal basis.
