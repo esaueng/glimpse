@@ -57,3 +57,73 @@ Chrome QA with a local synthetic-data server verified the third-app selector, Op
 The missing `previews` configuration is repaired with an isolated `glimpse-preview` D1 database, a dedicated migration configuration and a separate Preview Access audience. Both migrations were applied to that staging database, not production. The saved `Glimpse previews` Access application protects only this Worker's preview URLs with the same exact-owner AND Cloudflare-login policy; no shared policy was edited.
 
 The configuration regression checks database/migration-target alignment, separate JWT audiences, disabled production workers.dev and absence of production routes, crons or service bindings in Previews. Real local Worker tests reject tokens across both environments and verify that Preview counts do not enter the production test database. Local typecheck, nine regression scenarios and clean Wrangler build/dry-run passed. Hosted preview verification and GitHub CI are recorded on PR #5; the latter is independently blocked by account payments/spending limits until resolved. OpenLattice3D PR #74 passed its hosted checks, merged, and its automatic production build succeeded.
+
+## Expanded analytics and top-bar dashboard (16 October 2026 UTC)
+
+This follow-up is based on the merged dark theme, OpenLattice3D integration and
+isolated Preview configuration. The new v2 details apply to OpenZCAD/OpenFEA;
+third-app legacy counts and Preview/production separation remain supported.
+
+Local service validation: `npm run check` passes **15 tests** across real
+Worker/RPC/D1/Access, preview configuration and dashboard measurement semantics,
+plus typechecking and a clean Wrangler deployment dry-run. Four privacy-policy
+regressions pass after synchronizing the newly merged CI policy. Tests cover strict event/report/census schemas, extra private
+fields, concurrent app-separated counts, stock replacement rather than summing,
+out-of-order deliveries across UTC days, retention, and environment JWT isolation.
+
+Integration verification was run in the actual app checkouts:
+
+- OpenZCAD: root **4,629 passed / 8 skipped**, web **2,956 passed**, parity
+  **185 passed / 1 skipped**, typecheck and build/bundle gate passed. Lint has
+  zero errors and the existing 16 hook warnings. The final consent/API/census
+  probes passed (99 root and 62 web focused checks). Settings browser suite:
+  **29 passed**, with the cloud-off cold reload repeated three more times.
+  The full unrelated browser suite was not rerun. A newly merged master-switch
+  guard exposed a startup edge during integration; v2 now rechecks the stored
+  cloud choice on every send and the strengthened cold/cross-tab regressions pass.
+  Census SQL tests migrate the real schema, including a legacy NULL-sized
+  artifact inserted before the historical upload guards; those guards are kept.
+- OpenFEA: core builds, all five package suites (**269 tests**), Cloudflare config
+  verification, typecheck, root **1,520 tests**, production build and bundle budgets
+  passed. Final targeted analytics/relay/storage checks: **31 passed**. Isolated
+  real-Chrome STEP-selection and portable project-results probes passed. The
+  initial sandboxed Chrome launch could not expose its test debugging port;
+  running the same isolated probes with the required process permissions passed.
+
+Chrome extension QA used a synthetic local D1 fixture, never production events.
+Verified combined/per-app/Basic/Optional/date filters, empty results, stale data
+on a failed refresh, Storage/Diagnostics/Privacy navigation, and preserved lattice
+generation counts (3 generations, 1 export) in the third-app view. A valid pasted
+report rendered only its own counts; adding a private-text field rejected it and
+cleared the earlier report. File-picker automation requires the extension's
+file-URL permission and was not completed; that broader permission was not granted.
+The parser and byte/schema bounds are tested, and Paste JSON is fully exercised.
+
+Design QA: Chrome screenshots at **1536×1024** and **390×844**, no page horizontal
+overflow or unexpected browser warnings/errors. `view_image` compared the final
+concept with desktop/mobile renders. Inspected top navigation/selection, title and
+metric typography, dark palette and contrast, divided summary strip, chart axes,
+bar shares, table density, spacing and mobile ordering. The overly small chart
+labels and bars normalized to the largest bucket were corrected; bars now encode
+share of observations. Above-the-fold copy is the concept plus explicit applied
+scope and measurement corrections. Intentional additions: preserved third-app
+labels/completed outcomes, accessible daily tables, and local Paste JSON. Dates
+use native controls, data/UTC updates are real fixture values, and there is no
+invented live metric or remaining material visual mismatch. Screenshots and the
+local authorization fixture are outside Git; the latter is not shipped.
+
+**Not deployed or remotely migrated:** new service `0003_census.sql` (including
+its isolated Preview DB) and OpenZCAD `0028_glimpse_consent.sql` need separate
+migration authorization and rollout review. No expanded collection flags,
+production data, Access policies or domains were changed. Production nonzero
+cohort totals, real event delivery, expiry/withdrawal propagation, hourly census
+and retention delivery, and infrastructure backups/log retention await staging
+and production verification. Hosted CI/Preview results are recorded on the PRs;
+local checks are not a claim that those hosted checks passed.
+
+Final Overview refinement: removed the subtitle, chart caption, panel paragraphs,
+report controls and footer. Detailed views retain definitions and local reports.
+Chrome recheck at 1536×1024 and 390×844 shows no horizontal overflow; the desktop
+Overview fits within 1024px height. Diagnostics still exposes report inspection,
+with no console warnings/errors. Fresh screenshots were compared with the
+top-bar concept using `view_image`. The reduced copy is intentional owner steering.

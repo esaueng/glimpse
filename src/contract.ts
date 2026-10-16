@@ -1,3 +1,4 @@
+import { expandedMetric } from "./expanded";
 // This vocabulary is the entire analytics schema. No free-text properties.
 export const BUCKETS = [
   "lt_100ms",
@@ -31,8 +32,12 @@ export const APP_NAMES: Record<App, string> = {
   openlattice3d: "OpenLattice3D",
 };
 const LATTICE_OPTIONAL = [
-  "workspace_opened", "export_completed", "export_failed",
-  "generation_completed", "generation_failed", "operation_latency",
+  "workspace_opened",
+  "export_completed",
+  "export_failed",
+  "generation_completed",
+  "generation_failed",
+  "operation_latency",
 ];
 export type Level = "basic" | "optional";
 export interface Metric {
@@ -48,12 +53,19 @@ export interface Row extends Metric {
 export function metric(value: unknown, app: App): Metric | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   const v = value as Record<string, unknown>;
-  if (Object.keys(v).some((k) => !["level", "event", "bucket"].includes(k)))
+  if (
+    Object.keys(v).length !== 3 ||
+    Object.keys(v).some((k) => !["level", "event", "bucket"].includes(k))
+  )
     return null;
   if (typeof v.event !== "string" || typeof v.bucket !== "string") return null;
   const allowed: readonly string[] =
     v.level === "basic" ? BASIC : v.level === "optional" ? OPTIONAL : [];
-  if (!allowed.includes(v.event)) return null;
+  if (!allowed.includes(v.event)) {
+    return v.level === "optional" && expandedMetric(v.event, v.bucket, app)
+      ? { level: "optional", event: v.event, bucket: v.bucket }
+      : null;
+  }
   if (
     (app === "openlattice3d" &&
       v.level === "optional" &&

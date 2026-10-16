@@ -34,6 +34,15 @@ The Vite build creates `dist`, which is intentionally ignored by Git. Leaving Bu
 
 `npm run check:deploy` removes generated `dist` output, runs a deployment **dry-run**, and checks that the generated HTML references existing bundled JavaScript and CSS. CI invokes this regression after typechecking and tests; it cannot pass solely because an earlier frontend build left `dist` behind. This does not upload a Worker, create/migrate D1, or establish production Access configuration. The original main deployment subsequently built/uploaded assets successfully, then exposed the missing D1 binding. The dedicated database, initial migration and protected production deployment are now complete; see the validation ledger. Merge the production-configuration PR before relying on future main builds, so main retains the real database binding and Access configuration.
 
+## Expanded analytics upgrade
+
+Before merging/deploying the expanded dashboard, follow
+[EXPANDED-ANALYTICS.md](EXPANDED-ANALYTICS.md). It adds Glimpse migration
+`0003_census.sql` and OpenZCAD migration `0028_glimpse_consent.sql`; neither has
+been applied remotely as part of this change. Initial-deployment authorization
+does not authorize these new production migrations. Deploy the reviewed service
+before app integrations. All expanded metrics remain optional and old browser
+grants require a fresh choice; cloud account statistics require a separate grant.
 ## OpenLattice3D rollout
 
 The third-app change includes `0002_openlattice3d.sql`; it has **not** been applied to production as part of this change. The migration rebuilds the app CHECK constraint, copying all seven existing columns, counts and primary keys unchanged. The local Worker/D1 regression upgrades a populated v1 database and verifies preservation, RPC app isolation, rejection of unknown app values and combined reads.
