@@ -36,3 +36,19 @@ scroll inside labelled containers. No hover-only essential values.
 Reports are strict local files limited to 64 KiB and 128 unique aggregate rows,
 validated by the same schema as producers. Invalid files clear prior report state.
 Report rows never enter service totals. Clear and reload remove local report UI.
+
+Final fidelity ledger: top-bar navigation replaced the initial side rail at the
+owner's request; compact panels, 28px headings, 30px monospace metrics, original
+dark tokens and native filters are retained. Chart labels were enlarged; bar
+lengths now agree with percent shares. Applied scope is explicit. The merged
+third-app integration adds a comparison line and completed-outcome table column;
+no new third-app tracking is introduced. Daily data tables and Paste JSON are
+intentional accessible/local-report affordances. Native-size desktop and mobile
+renders were inspected with the concept using view_image; no material mismatch
+or mobile page overflow remains. Dynamic counts and native date formatting are
+intentional differences from illustrative concept data.
+
+Overview copy was reduced at the owner's request: no subtitle, chart caption,
+explanatory panel paragraphs or footer. One compact applied-scope line retains
+opt-in, app/date and OpenZCAD snapshot context. Report inspection lives only in
+Diagnostics; definitions and privacy details remain in detailed views.
