@@ -1,4 +1,111 @@
-# Validation and remaining rollout work
+# Validation and rollout record
+
+## Latest live verification — 16 October 2026 UTC
+
+Collection was subsequently enabled with owner authorization, while optional
+browser analytics remained consent-gated. The production configurations on main
+for OpenZCAD, OpenFEA and OpenLattice3D now set both collection flags to true;
+this enables ingestion, not browser consent. Glimpse has received optional
+workspace activity from all three apps.
+
+The OpenZCAD local-only cloud-load fix in
+[#693](https://github.com/esaueng/OpenZCAD/pull/693) is merged and deployed.
+Production build metadata returned commit
+`c8e3ec650ad9c095a486221ab1f016e05594cf6a`. At 04:27 UTC, a signed-in Chrome
+session with optional analytics already opted in reopened the built-in Mounting
+Bracket example after a full reload. It remained local-only, offering **Save to
+my account**. Across that reload, Glimpse's OpenZCAD `workspace_opened` total
+increased from 10 to 11, while `error_cloud_load` and `cloud_status / other`
+both remained at five. Those historical errors were retained. The consent
+choice was left unchanged, and no private model was edited or uploaded.
+
+The dashboard's optional view also showed one OpenFEA workspace open and two
+OpenLattice3D workspace opens. These are anonymous aggregate event counts,
+not distinct visitors or a per-project activity trail. A nonempty OpenZCAD
+account snapshot was visible; expiry/withdrawal propagation and retention cron
+execution still require separate production verification.
+
+## Initial deployment snapshot — 16 October 2026 UTC
+
+This section records the earlier deployment before collection was enabled.
+Its version IDs, empty counters and disabled flags describe that snapshot;
+the live verification above supersedes those collection-status claims.
+
+The owner explicitly authorized merging all three reviewed PRs, applying their
+required migrations and deploying the updates. All three are merged; their
+required checks passed at the final PR heads and their production Workers builds
+succeeded. Existing automatic deployments were used; no CI protection was bypassed.
+
+| Component | Merged change | Active production version |
+| --- | --- | --- |
+| Glimpse | [#7](https://github.com/esaueng/glimpse/pull/7), merge `477df3f` | `74b0b69c-d096-47b4-bb3e-74acb1f025ba` |
+| OpenZCAD | [#689](https://github.com/esaueng/OpenZCAD/pull/689), merge `6d8276e` | `1051e80c-9009-4c0f-b9d4-c4c238d37e52` |
+| OpenFEA | [#149](https://github.com/esaueng/OpenFEA/pull/149), merge `d843707` | `d7539848-b580-44bb-9f0f-fd71e5afd1f8` |
+
+Glimpse's active version also includes the independently merged branding PR #8
+on main `bf291a4`; those assets were preserved. OpenZCAD's final reviewed head
+`e78fee20` includes the companion review's fixes and an awaited React `act` around
+the asynchronous parameter-rename focus transition. Its focus assertions remain
+unchanged; ten focused runs passed 80 tests, followed by the complete hosted
+quality, validation, unit and six-shard browser checks. The merged main's
+Cloudflare verify/upload and Workers Build checks also passed.
+
+### Applied migrations
+
+- Glimpse Production: `0001_aggregates.sql`, `0002_openlattice3d.sql` and
+  `0003_census.sql` are recorded as applied. The pending second and third
+  migrations were applied during this rollout. Before/after reads confirmed
+  zero aggregate rows/events and no inserted synthetic production events.
+- Glimpse isolated Preview: `0003_census.sql` was applied through the dedicated
+  Preview migration configuration; all three migrations are now applied.
+- OpenZCAD's existing production database: `0028_glimpse_consent.sql` was applied
+  before its automatic deployment. The post-migration read found zero account
+  permission grants and generation zero. OpenFEA requires no migration.
+
+All three remote migration targets report **no migrations to apply**. Read-only
+Time Travel bookmarks were recorded before the production schema changes; no
+existing account/project contents were exported.
+
+### Verified live
+
+- Authenticated Chrome loads the compact dark Glimpse Overview, per-app/date
+  controls, Basic/Optional views and Storage page through the protected
+  `glimpse.esau.app` API. Production counts are genuinely empty; unsupported
+  OpenFEA cloud-account measurements remain distinct from zero. No console
+  warnings/errors were observed. Existing production/Preview Access audiences
+  and separate databases were preserved.
+- Anonymous HTTP probes receive Cloudflare's edge challenge (403) without
+  application data. This does not independently prove the Access redirect or
+  Worker JWT rejection after the edge challenge.
+- The active app versions bind `GLIMPSE` to `glimpse` with their respective
+  `OpenZCADIngest` and `OpenFEAIngest` entrypoints. Both apps' active
+  `GLIMPSE_BASIC_ENABLED` and `GLIMPSE_USAGE_ENABLED` values are **false**.
+- OpenZCAD `/api/health` returns 200 with its existing account/storage readiness
+  checks true. Chrome loads the signed-out workspace and expanded Privacy & data
+  notice with usage consent unchecked and no warning/error logs. No model edits
+  or consent changes were made.
+- OpenFEA's origin `/healthz` returns 200 and `status: ok`. Chrome loads its start
+  page and expanded notice with consent unchecked and the report action disabled.
+  No user file was opened and no consent was granted. A PWA-controlled browser
+  navigation to `/healthz` renders the frontend fallback; the direct origin probe
+  verifies the health endpoint separately.
+
+### Verification limits at the initial deployment
+
+At this initial deployment, collection remained disabled. Live opted-in event delivery and nonzero aggregate
+isolation, signed-in account permission/expiry/withdrawal propagation, hourly
+census delivery and retention cron execution have not been verified in production.
+The local/hosted regressions below cover collection contracts and handlers in test environments.
+Infrastructure log/backup retention and anonymous behavior beyond zone bot
+protection also remain separate operational checks. Enabling collection requires
+a deliberate rollout and the applicable user choices; deployment alone does not
+grant consent.
+
+## Historical implementation and setup checks
+
+The entries below record earlier stages and their limitations at that time.
+Their references to pending deployment, migrations or payment-blocked CI are
+historical; the newer verification records above supersede those rollout claims.
 
 15 October 2026. The owner authorized dedicated production database setup, the initial migration, and Glimpse deployment. The protected dashboard is live. No app analytics activation was performed.
 
