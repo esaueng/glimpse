@@ -10,7 +10,8 @@
 <p align="center">Private analytics for OpenZCAD, OpenFEA, and OpenLattice3D.</p>
 
 <p align="center">
-  <a href="https://glimpse.esau.app">Dashboard · Access required</a> ·
+  <a href="https://glimpse.esau.app/demo">Try the public demo</a> ·
+  <a href="https://glimpse.esau.app">Private dashboard · Access required</a> ·
   <a href="docs/SETUP.md">Setup</a> ·
   <a href="docs/PRIVACY.md">Privacy</a> ·
   <a href="docs/VALIDATION.md">Validation & rollout</a>
@@ -20,6 +21,18 @@ Glimpse brings application activity, performance, storage, and diagnostics into 
 protected dashboard. It uses one Cloudflare Worker, a dedicated D1 database, and
 fixed service bindings from each application. Measurements become daily
 aggregates; voluntarily shared diagnostic reports can be inspected locally.
+
+## Try it
+
+[Open the public demo](https://glimpse.esau.app/demo) to explore the dashboard
+with fictional data. Try app, date, and collection filters; browse Storage,
+Diagnostics, and Privacy; or load the sample diagnostic report. All demo numbers
+are generated in your browser, with no connection to live analytics.
+
+The demo runs on a separate `glimpse-demo` Worker with static assets only: no
+D1 database, service bindings, ingestion, or credentials. Its files stay under
+`/demo/`. Only that path has a Cloudflare Access bypass; the live dashboard and
+`/api/stats` remain protected by Access and Worker JWT verification.
 
 ## Inside the dashboard
 
@@ -113,11 +126,13 @@ configuration. Keep development servers private.
 | Command | Purpose |
 | --- | --- |
 | `npm run dev` | Start the Vite UI development server |
+| `npm run build:demo` | Build the isolated public demo into `dist-demo/` |
+| `npm run dev:demo` | Serve the demo Worker locally on port 8788 |
 | `npm run build` | Build dashboard assets into `dist/` |
 | `npm run typecheck` | Check TypeScript without emitting files |
 | `npm test` | Run Worker/RPC/D1/auth, dashboard-data, and preview-isolation regressions |
 | `npm run check:deploy` | Remove `dist/`, prove a clean Wrangler dry-run builds assets, and verify bundle references |
-| `npm run check` | Run typechecking, tests, and the deployment dry-run |
+| `npm run check` | Run typechecking, tests, and both deployment dry-runs |
 | `npm run types` | Regenerate Cloudflare binding types after configuration changes |
 
 CI also runs the privacy-policy regressions:
