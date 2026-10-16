@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 324 80" role="img" aria-label="Glimpse">
+  <g transform="translate(0 8)">
+    <path fill="#a9c9fa" d="M10 18c0-3 1.5-5 4-6.5l15-8C33 1.5 36 4 36 8v48c0 4-3 6.5-7 4.5l-15-8c-2.5-1.5-4-3.5-4-6.5Z"/>
+    <path fill="#e8eef7" d="m46 13-5 4c-2 1.5-3 4-3 7v21c0 3 1 5.5 3 7l5 4Z"/>
+    <path fill="#a9c9fa" d="M44 16c0-4 3-5.5 6-3.5l8 5c2.5 1.5 4 3.5 4 6.5v20c0 3-1.5 5-4 6.5l-8 5c-3 2-6 .5-6-3.5Z"/>
+  </g>
+  <text x="80" y="57" fill="#e8eef7" font-family="Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="48" font-weight="600" letter-spacing="-1.5">Glimpse</text>
+</svg>

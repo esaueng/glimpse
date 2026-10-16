@@ -256,7 +256,14 @@ function Dashboard() {
             apply(filter, "Overview");
           }}
         >
-          <span aria-hidden="true">G</span>Glimpse
+          <img
+            className="brand-mark"
+            src="/brand/mark.svg"
+            alt=""
+            width="32"
+            height="32"
+          />
+          Glimpse
         </a>
         <nav aria-label="Main navigation">
           {views.map((v) => (
