@@ -101,17 +101,17 @@ summary:focus-visible,
 .brand {
   display: flex;
   align-items: center;
-  gap: 22px;
+  gap: 10px;
   text-decoration: none;
   font-size: 20px;
   font-weight: 650;
   white-space: nowrap;
 }
-.brand > span {
-  font-size: 31px;
-  line-height: 1;
-  color: var(--comparison);
-  font-weight: 800;
+.brand-mark {
+  display: block;
+  width: 32px;
+  height: 32px;
+  flex: none;
 }
 .topbar nav {
   display: flex;
@@ -648,8 +648,9 @@ footer {
     font-size: 18px;
     gap: 12px;
   }
-  .brand > span {
-    font-size: 26px;
+  .brand-mark {
+    width: 28px;
+    height: 28px;
   }
   .access-label {
     order: 1;
