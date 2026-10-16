@@ -77,7 +77,7 @@ export function Activity({ data, event }: { data: Stats; event: string }) {
   return (
     <section className="panel activity-panel">
       <div className="panel-heading">
-        <h2>Daily activity</h2>
+        <h2>{event === "api_request" ? "API requests" : "Workspace opens"}</h2>
         <div className="legend">
           {APPS.filter(
             (app) => data.range.app === "all" || data.range.app === app,
@@ -97,11 +97,6 @@ export function Activity({ data, event }: { data: Stats; event: string }) {
           ))}
         </div>
       </div>
-      <p className="chart-caption">
-        {event === "api_request"
-          ? "Backend API requests"
-          : "Workspace opens · repeatable observations"}
-      </p>
       <svg
         className="activity-chart"
         viewBox={`0 0 ${width} ${height}`}

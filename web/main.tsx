@@ -292,15 +292,15 @@ function Dashboard() {
         <div className="page-heading">
           <div>
             <h1>{view}</h1>
-            <p>
-              {view === "Overview"
-                ? "Activity, capacity, and reliability."
-                : view === "Storage"
+            {view !== "Overview" && (
+              <p>
+                {view === "Storage"
                   ? "Consenting accounts and project capacity."
                   : view === "Diagnostics"
                     ? "Fixed diagnostic codes and operation distributions."
                     : "Collection boundaries and consent."}
-            </p>
+              </p>
+            )}
           </div>
           <div className="refresh">
             <button disabled={loading} onClick={() => setFilter({ ...filter })}>
@@ -379,8 +379,26 @@ function Dashboard() {
           </form>
         </details>
         <p className="scope-notice">
-          {scopes} Applied: {appName(applied.app)} · {applied.from} to{" "}
-          {applied.to} UTC.
+          {view === "Overview" ? (
+            <>
+              {optional ? "Opted-in only" : "Backend API activity"} ·{" "}
+              {appName(applied.app)} · {applied.from} – {applied.to} UTC
+              {optional && (
+                <>
+                  {" "}
+                  · Cloud: OpenZCAD
+                  {snapshot
+                    ? ` · Snapshot ${snapshot.day} UTC`
+                    : " · No snapshot"}
+                </>
+              )}
+            </>
+          ) : (
+            <>
+              {scopes} Applied: {appName(applied.app)} · {applied.from} to{" "}
+              {applied.to} UTC.
+            </>
+          )}
         </p>
         <div
           className={`load-status ${error ? "error-message" : !loading ? "quiet" : ""}`}
@@ -454,23 +472,17 @@ function Dashboard() {
                             )}
                           </td>
                           <td className="completed-value">
-                            {optional
-                              ? `${number(total(rows, a === "openfea" ? "solver_completed" : a === "openlattice3d" ? "generation_completed" : "export_completed", a))} ${a === "openfea" ? "solves" : a === "openlattice3d" ? "generations" : "exports"}${a === "openzcad" ? "" : ` · ${number(total(rows, "export_completed", a))} exports`}`
-                              : "Opt-in only"}
+                            {!data
+                              ? "—"
+                              : optional
+                                ? `${number(total(rows, a === "openfea" ? "solver_completed" : a === "openlattice3d" ? "generation_completed" : "export_completed", a))} ${a === "openfea" ? "solves" : a === "openlattice3d" ? "generations" : "exports"}${a === "openzcad" ? "" : ` · ${number(total(rows, "export_completed", a))} exports`}`
+                                : "Opt-in only"}
                           </td>
                         </tr>
                       ))}
                     </tbody>
                   </table>
                 </div>
-                <p className="panel-note">
-                  {optional
-                    ? `Workspace opens and diagnostic signals. ${number(total(rows, "solver_completed") + total(rows, "generation_completed"))} completed runs · ${number(total(rows, "export_completed"))} completed exports.`
-                    : "Backend API requests and HTTP 5xx outcomes."}
-                </p>
-                <p className="panel-note">
-                  Cloud account statistics are implemented for OpenZCAD only.
-                </p>
               </section>
             </div>
             <div className="equal-grid">
@@ -484,9 +496,7 @@ function Dashboard() {
                   <Histogram labels={sizeLabels} values={cloudValues} />
                 ) : (
                   <p className="empty-cell">
-                    {optional
-                      ? "No opted-in OpenZCAD snapshot received."
-                      : "Choose Opt-in analytics for cloud statistics."}
+                    {optional ? "No snapshot received." : "Opt-in only"}
                   </p>
                 )}
               </section>
@@ -499,9 +509,7 @@ function Dashboard() {
                 {optional ? (
                   <Codes rows={rows} limit={5} />
                 ) : (
-                  <p className="empty-cell">
-                    Diagnostic codes require opt-in analytics.
-                  </p>
+                  <p className="empty-cell">Opt-in only</p>
                 )}
               </section>
             </div>
@@ -696,8 +704,7 @@ function Dashboard() {
           <>
             <details className="panel performance">
               <summary>
-                <strong>Performance</strong>{" "}
-                <span>coarse operation timings</span>
+                <strong>Performance</strong>
               </summary>
               <div className="equal-grid">
                 {(optional
@@ -723,7 +730,7 @@ function Dashboard() {
                 inferred from these coarse ranges.
               </p>
             </details>
-            <ReportInspector />
+            {view === "Diagnostics" && <ReportInspector />}
           </>
         )}
         {view === "Privacy" && (
@@ -781,12 +788,14 @@ function Dashboard() {
             </p>
           </section>
         )}
-        <footer>
-          <span>
-            No model contents, names, visitor IDs, or individual timelines.
-          </span>
-          <span>Glimpse · private analytics</span>
-        </footer>
+        {view !== "Overview" && (
+          <footer>
+            <span>
+              No model contents, names, visitor IDs, or individual timelines.
+            </span>
+            <span>Glimpse · private analytics</span>
+          </footer>
+        )}
       </main>
     </>
   );
