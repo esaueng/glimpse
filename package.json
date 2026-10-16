@@ -1,15 +1,28 @@
 {
   "name": "glimpse",
   "version": "0.1.0",
+  "description": "Private analytics for OpenZCAD, OpenFEA, and OpenLattice3D, built on Cloudflare Workers and D1.",
+  "homepage": "https://glimpse.esau.app/demo",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/esaueng/glimpse.git"
+  },
+  "bugs": {
+    "url": "https://github.com/esaueng/glimpse/issues"
+  },
   "private": true,
   "type": "module",
   "scripts": {
     "dev": "vite --host 127.0.0.1",
     "build": "vite build",
+    "build:demo": "vite build --config vite.demo.config.ts",
+    "dev:demo": "wrangler dev --config wrangler.demo.jsonc --ip 127.0.0.1 --port 8788",
+    "deploy:demo": "wrangler deploy --config wrangler.demo.jsonc",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "types": "wrangler types",
-    "check": "npm run typecheck && npm test && npm run check:deploy",
+    "check": "npm run typecheck && npm test && npm run check:deploy && npm run check:demo",
+    "check:demo": "node scripts/check-demo-build.mjs",
     "check:deploy": "node scripts/check-deploy-build.mjs"
   },
   "dependencies": {
