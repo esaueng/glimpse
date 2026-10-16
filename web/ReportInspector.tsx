@@ -1,7 +1,7 @@
 import { useRef, useState } from "react";
 import { parseReport, type Report } from "../src/expanded";
 import { appName, number } from "./data";
-export function ReportInspector() {
+export function ReportInspector({ demo = false }: { demo?: boolean }) {
   const input = useRef<HTMLInputElement>(null),
     [report, setReport] = useState<Report | null>(null),
     [error, setError] = useState(""),
@@ -52,6 +52,27 @@ export function ReportInspector() {
           <p>Opened locally. No automatic upload.</p>
         </div>
         <div className="report-actions">
+          {demo && (
+            <button
+              type="button"
+              onClick={() => {
+                sequence.current++;
+                parse(
+                  JSON.stringify({
+                    schema: 2,
+                    app: "openfea",
+                    rows: [
+                      { event: "error_mesh", bucket: "none", count: 7 },
+                      { event: "solver_backend", bucket: "webgpu", count: 124 },
+                      { event: "mesh_latency", bucket: "1s_10s", count: 83 },
+                    ],
+                  }),
+                );
+              }}
+            >
+              Load sample report
+            </button>
+          )}
           <button type="button" onClick={() => input.current?.click()}>
             Inspect a report
           </button>
