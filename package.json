@@ -1,6 +1,15 @@
 {
   "name": "glimpse",
   "version": "0.1.0",
+  "description": "Private analytics for OpenZCAD, OpenFEA, and OpenLattice3D, built on Cloudflare Workers and D1.",
+  "homepage": "https://glimpse.esau.app",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/esaueng/glimpse.git"
+  },
+  "bugs": {
+    "url": "https://github.com/esaueng/glimpse/issues"
+  },
   "private": true,
   "type": "module",
   "scripts": {
