@@ -36,18 +36,19 @@ The Vite build creates `dist`, which is intentionally ignored by Git. Leaving Bu
 
 ## Expanded analytics upgrade
 
-Before merging/deploying the expanded dashboard, follow
-[EXPANDED-ANALYTICS.md](EXPANDED-ANALYTICS.md). It adds Glimpse migration
-`0003_census.sql` and OpenZCAD migration `0028_glimpse_consent.sql`; neither has
-been applied remotely as part of this change. Initial-deployment authorization
-does not authorize these new production migrations. Deploy the reviewed service
-before app integrations. All expanded metrics remain optional and old browser
+The separately authorized rollout applied Glimpse `0003_census.sql` to Production
+and the isolated Preview database, plus OpenZCAD `0028_glimpse_consent.sql` to
+its existing production database. See the current [validation ledger](VALIDATION.md).
+For new installations, follow [EXPANDED-ANALYTICS.md](EXPANDED-ANALYTICS.md) and
+authorize migrations separately; deploy the reviewed service before app
+integrations. All expanded metrics remain optional and old browser
 grants require a fresh choice; cloud account statistics require a separate grant.
+
 ## OpenLattice3D rollout
 
-The third-app change includes `0002_openlattice3d.sql`; it has **not** been applied to production as part of this change. The migration rebuilds the app CHECK constraint, copying all seven existing columns, counts and primary keys unchanged. The local Worker/D1 regression upgrades a populated v1 database and verifies preservation, RPC app isolation, rejection of unknown app values and combined reads.
+The third-app change includes `0002_openlattice3d.sql`; it is now applied to Production and the isolated Preview database. The migration rebuilds the app CHECK constraint, copying all seven existing columns, counts and primary keys unchanged. The local Worker/D1 regression upgrades a populated v1 database and verifies preservation, RPC app isolation, rejection of unknown app values and combined reads.
 
-With separate production authorization, apply this migration to the dedicated Glimpse D1 database and deploy the collector with `OpenLattice3DIngest` before configuring the app binding:
+When setting up another deployment, authorize and apply this migration to its dedicated Glimpse D1 database and deploy the collector with `OpenLattice3DIngest` before configuring the app binding:
 
 ```json
 {"binding":"GLIMPSE","service":"glimpse","entrypoint":"OpenLattice3DIngest"}
@@ -64,7 +65,7 @@ Rollback by disabling the app flags first. The expanded schema accepts old app v
 
 `Glimpse previews` is a separate Access application scoped to **glimpse → A Worker's preview URLs**, including new branches. It reuses the existing `Internal admin tools - Cloudflare` policy, without editing that shared policy: exact owner identity AND Cloudflare login. Cloudflare is the sole available identity provider; all-provider acceptance and Cloudflare One Client authentication remain off. It has its own AUD, configured only under `previews.vars`. Production tokens are rejected by the Preview Worker and Preview tokens by production. Production `workers_dev` stays disabled; `preview_urls` is enabled after the Preview Access policy exists. Do not reuse the production AUD or database for branch previews.
 
-The two schema migrations have been applied **only to the dedicated Preview database** as part of this fix. The third-app production migration remains a separately authorized rollout step. A separate migration configuration prevents the Preview command from accidentally targeting production, following [Cloudflare's D1 Preview guidance](https://developers.cloudflare.com/workers/previews/resources/#d1-migrations):
+All three Glimpse schema migrations are now applied to both Production and the dedicated Preview database, under separate rollout authorization. A separate migration configuration prevents the Preview command from accidentally targeting production, following [Cloudflare's D1 Preview guidance](https://developers.cloudflare.com/workers/previews/resources/#d1-migrations):
 
 ```sh
 npx wrangler d1 migrations apply PREVIEW_DB --remote --config wrangler.preview-migrations.jsonc
