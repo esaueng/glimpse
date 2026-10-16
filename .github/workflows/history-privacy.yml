@@ -32,7 +32,7 @@ jobs:
       # bootstrap tag permitted by the environment's branch/tag restrictions.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: e6dba01cdd8f9aaf419e429b336836d8b5d678b0
+          ref: c801f8c97da9b7924753d7e8a75d02d1e90d4bee
           persist-credentials: false
           sparse-checkout: .github/privacy
       - name: Create narrowly scoped check publisher token
