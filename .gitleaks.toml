@@ -1,0 +1,16 @@
+title = "Glimpse public-source secret scan"
+
+[extend]
+useDefault = true
+
+[[rules]]
+id = "generic-api-key"
+
+  # These exact Access JWT audiences identify token recipients; they grant no access.
+  # Keep every default credential rule active, including elsewhere in these files.
+  [[rules.allowlists]]
+  description = "Public Access audience configuration only"
+  condition = "AND"
+  paths = ['''^(wrangler\.jsonc|worker-configuration\.d\.ts)$''']
+  regexTarget = "line"
+  regexes = ['''^\s*"?ACCESS_AUD"?:\s*"(1207bdb7d60dadda07f486a5e3547c4c74ceb8688dc42a77002f64d29e2eebcb|bbf706b5fc360ae01633aa2f477418193ea388e5870ad9124074b3320642a699)"[,;]?\s*$''']
