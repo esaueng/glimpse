@@ -74,3 +74,35 @@ npx wrangler d1 migrations apply PREVIEW_DB --remote --config wrangler.preview-m
 All branches share this staging database. To isolate a branch further, change its Preview binding and this migration file together. Keep fixtures synthetic and do not copy production data. Cron triggers do not run for Previews, so clear staging fixtures explicitly when no longer needed.
 
 Hosted branch builds use `npm run build` followed by `npx wrangler preview`. The same command may be run locally for the authorized Preview environment; `npx wrangler deploy` still targets production and needs authorization. A successful Preview build is separate from GitHub's full CI result and production deployment. Rollback by disabling Preview URLs first; production domain and database settings do not depend on this staging configuration.
+
+## Public synthetic demo
+
+The public URL is `https://glimpse.esau.app/demo`. Deploy it separately with
+`npm run deploy:demo` after authenticating to the Esau account. This command is
+a production deployment and requires authorization. `wrangler.demo.jsonc` owns
+Worker `glimpse-demo` and only the `glimpse.esau.app/demo*` route. Its handler
+accepts `/demo`, `/demo/`, and an allowlist of demo asset paths; unknown paths
+return 404. No bindings to D1, other Workers, secrets, or collection exist.
+The live Worker, database, JWT audience, and collection configuration do not
+change. The demo CSP disables all browser connections (`connect-src 'none'`).
+
+In Cloudflare Access, the separate **Glimpse public demo** self-hosted application
+covers **only** `glimpse.esau.app/demo` (including its child paths), with an
+Everyone Bypass policy. Keep **Glimpse** at `glimpse.esau.app` and its existing
+owner-only Allow policy. Access uses the most specific matching application
+path. Never add Everyone Bypass to the hostname-wide live application.
+
+The existing zone-wide Managed Challenge rule also excludes only GET/HEAD
+requests where the host is `glimpse.esau.app` and the path equals `/demo` or
+starts with `/demo/`. This prevents a bot challenge from blocking demo visitors
+and its static assets. Other hostnames, live paths, and methods keep the
+existing challenge behavior; rate limiting and other security rules still apply.
+Remove only this demo-specific exclusion when rolling the demo back.
+
+Validate without cookies: `/demo` and its referenced `/demo/assets/*` files
+must return 200; `/`, `/api/stats`, `/assets/*`, and `/demo-other` must still
+require Access (the existing bot challenge can run before the login redirect). `/demo/api/stats` must return 404 without querying D1.
+No migrations or data seeding are needed. To roll back, remove only the demo
+route and its separate Access application; retain the live Access application.
+Main's existing automatic deployment updates the private Worker. Deploy demo
+changes independently using the demo config.

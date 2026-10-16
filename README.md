@@ -1,28 +1,189 @@
-# Glimpse
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="public/brand/logo.svg">
+    <img src="public/brand/logo-light.svg" alt="Glimpse" width="280">
+  </picture>
+</p>
 
-A small, protected analytics dashboard for OpenZCAD, OpenFEA and OpenLattice3D. One Cloudflare Worker, one D1 table of daily counters, and three fixed service-binding entrypoints. No public ingest endpoint or raw event history.
+<h1 align="center">Glimpse</h1>
 
-- Basic statistics: server-side API activity, 5xx errors, coarse response times.
-- Optional usage: explicit opt-in only; browser-local exports, solver outcomes, feature actions and workflow-step counts. Withdrawal stops future collection immediately. Optional figures represent opted-in users only.
-- Combined totals and per-app views, UTC date filters (up to 90 days), activity bars, event counts and timing histograms. App and collection level remain distinct in storage and queries.
+<p align="center">Private analytics for OpenZCAD, OpenFEA, and OpenLattice3D.</p>
 
-Primary domain: [glimpse.esau.app](https://glimpse.esau.app), protected by Cloudflare Access with the owner's exact account identity and Cloudflare login required. The hostname, issuer and application audience are configured in Wrangler; the dedicated database ID is configured. The initial schema is applied and the protected dashboard is deployed. Counts remain empty until the app integrations are deployed and deliberately enabled.
+<p align="center">
+  <a href="https://glimpse.esau.app/demo">Try the public demo</a> ·
+  <a href="https://glimpse.esau.app">Private dashboard · Access required</a> ·
+  <a href="docs/SETUP.md">Setup</a> ·
+  <a href="docs/PRIVACY.md">Privacy</a> ·
+  <a href="docs/VALIDATION.md">Validation & rollout</a>
+</p>
 
-See [setup](docs/SETUP.md), [privacy and consent limits](docs/PRIVACY.md), and [validation status](docs/VALIDATION.md). GitHub Actions CI validates without deploying; the existing Cloudflare Workers Builds integration deploys main pushes.
+Glimpse brings application activity, performance, storage, and diagnostics into a
+protected dashboard. It uses one Cloudflare Worker, a dedicated D1 database, and
+fixed service bindings from each application. Measurements become daily
+aggregates; voluntarily shared diagnostic reports can be inspected locally.
 
-See the [public-source privacy review](docs/PUBLICATION.md) for history-scan results, publication limits and the commit-privacy/secret-scan CI checks.
+## Try it
+
+[Open the public demo](https://glimpse.esau.app/demo) to explore the dashboard
+with fictional data. Try app, date, and collection filters; browse Storage,
+Diagnostics, and Privacy; or load the sample diagnostic report. All demo numbers
+are generated in your browser, with no connection to live analytics.
+
+The demo runs on a separate `glimpse-demo` Worker with static assets only: no
+D1 database, service bindings, ingestion, or credentials. Its files stay under
+`/demo/`. Only that path has a Cloudflare Access bypass; the live dashboard and
+`/api/stats` remain protected by Access and Worker JWT verification.
+
+## Inside the dashboard
+
+- **Overview:** combined and per-app totals, daily activity, event breakdowns,
+  and coarse performance distributions.
+- **Storage:** OpenZCAD cloud account, project, revision, and storage snapshots;
+  saved project size and part-count observations for OpenZCAD and OpenFEA.
+- **Diagnostics:** fixed failure categories and feature-operation counts, plus a
+  local JSON report inspector with file and paste support.
+- **Privacy:** collection definitions, consent scopes, retention, and measurement
+  limits alongside the numbers.
+
+The dark, responsive interface includes UTC date ranges of up to 90 days,
+URL-backed filters, accessible data tables, and manual refresh. Empty,
+unsupported, unavailable, and stale results have distinct states.
+
+### Application coverage
+
+| Application | Measurements supported by the service |
+| --- | --- |
+| **OpenZCAD** | API counters; opt-in CAD operations, exports, diagnostics, size/part/transfer observations; cloud account and storage snapshots with separate account permission |
+| **OpenFEA** | API counters; opt-in mesh/solver/export outcomes, workflow steps, diagnostics, and size/part/transfer observations. No cloud account census |
+| **OpenLattice3D** | API counters; opt-in workspace opens, export and generation outcomes, and operation timing. Expanded v2 metrics and local reports do not apply |
+
+Support in this repository does not establish that an integration is enabled or
+verified in production. The [validation ledger](docs/VALIDATION.md) records prior
+checks and remaining rollout work; the [setup guide](docs/SETUP.md) covers the
+required migrations and deployment order.
+
+## How data reaches Glimpse
+
+```mermaid
+flowchart LR
+  App[Application Worker] -->|Fixed app service binding| Worker[Glimpse Worker]
+  Worker --> DB[(D1 aggregates)]
+  Dashboard -->|Cloudflare Access + verified JWT| Worker
+  Report[User-shared JSON] --> Inspector[Local report inspector]
+```
+
+`OpenZCADIngest`, `OpenFEAIngest`, and `OpenLattice3DIngest` fix the caller's app
+identity. `record({ level, event, bucket })` validates an allowlisted metric and
+increments its UTC receipt-day counter. OpenZCAD also has a `snapshot(...)`
+entrypoint for aggregate cloud statistics. There is no public HTTP ingestion
+endpoint. Authenticated dashboard reads use `/api/stats`.
+
+Daily counters and the latest snapshot per app/day are stored separately.
+Snapshots represent stocks at a point in time and are never summed across days;
+generation checks discard duplicate or out-of-order deliveries. Aggregates are
+retained for 90 UTC calendar days, with expired rows excluded from reads and
+removed by a daily job.
+
+## Collection and interpretation
+
+**Basic** counters measure server-side API requests, HTTP 5xx failures, and coarse
+response times. They count operations, not people, visits, or browser-local work.
+
+**Optional** analytics require an enabled app deployment switch and explicit
+app-local consent. Expanded OpenZCAD/OpenFEA collection requires fresh v2 consent;
+OpenZCAD account statistics have a separate, expiring permission. Optional totals
+describe the opted-in population only. Workflow steps are independent counts,
+not individual timelines.
+
+Glimpse's analytics schema excludes visitor identifiers, IPs, URLs, model content,
+project names, and raw error text or stacks. It stores no raw event history.
+Infrastructure and authentication logs have separate settings and retention; see
+the [privacy review](docs/PRIVACY.md) for that boundary.
+
+Reports stay in the current browser page and never enter the aggregate database.
+The inspector accepts only validated v2 JSON, up to 64 KiB and 128 unique aggregate
+rows. Clear or reload removes the inspected report.
+
+These are best-effort operational measurements. Lost or spoofed events, rate
+limits, repeated observations, and consent selection can affect totals. They are
+not billing records or unique-user estimates.
+
+## Development
+
+Use **Node.js 22.12 or newer** and npm.
 
 ```sh
 npm ci
 npm run check
+npm run dev
 ```
 
-`npm run check` typechecks, runs real Worker/RPC/D1/auth regression tests, removes generated `dist` output and proves a Wrangler deployment dry-run builds the dashboard and bundles the Worker without a separate build step. `npm run dev` serves the dashboard UI only; the authenticated API needs `wrangler dev` and Access configuration. A missing API shows an error instead of fake data. Do not expose the Vite development server to the internet.
+`npm run dev` serves the dashboard UI on loopback only. It needs a configured
+Worker API for real data; an unavailable API produces an error state. Follow
+[setup](docs/SETUP.md) for local D1 migrations, `wrangler dev`, and Access
+configuration. Keep development servers private.
 
-The event vocabulary is maintained in `src/contract.ts` and mirrored by the small app adapters. Changing the schema requires coordinated PRs and a privacy review. Backend API counters do not measure browser-local work or people; optional workflow counts cannot reconstruct individual workflows.
+| Command | Purpose |
+| --- | --- |
+| `npm run dev` | Start the Vite UI development server |
+| `npm run build:demo` | Build the isolated public demo into `dist-demo/` |
+| `npm run dev:demo` | Serve the demo Worker locally on port 8788 |
+| `npm run build` | Build dashboard assets into `dist/` |
+| `npm run typecheck` | Check TypeScript without emitting files |
+| `npm test` | Run Worker/RPC/D1/auth, dashboard-data, and preview-isolation regressions |
+| `npm run check:deploy` | Remove `dist/`, prove a clean Wrangler dry-run builds assets, and verify bundle references |
+| `npm run check` | Run typechecking, tests, and both deployment dry-runs |
+| `npm run types` | Regenerate Cloudflare binding types after configuration changes |
 
-Cloudflare Workers Builds must have **Build command: `npm run build`**, **Deploy command: `npx wrangler deploy`**, and **Root directory: `/`**. The Wrangler custom build also covers direct CLI use; see [setup](docs/SETUP.md#cloudflare-workers-builds).
+CI also runs the privacy-policy regressions:
 
-OpenLattice3D support requires the additive `0002_openlattice3d.sql` migration before enabling that app. It preserves existing aggregates while expanding the fixed app allowlist. Production application of this migration and app activation remain separate authorized rollout steps; see [setup](docs/SETUP.md#openlattice3d-rollout).
+```sh
+python3 -m unittest discover -s scripts -p 'test_*.py'
+```
 
-Branch previews have a separate D1 database and Access audience, with the same owner-only access policy. See [Preview setup](docs/SETUP.md#isolated-branch-previews).
+The stack is TypeScript, React 19, Vite, native CSS/SVG charts, Cloudflare Workers,
+D1, and Cloudflare Access. No external fonts or chart/UI libraries are loaded.
+
+## Deployment
+
+The configured dashboard hostname is [glimpse.esau.app](https://glimpse.esau.app).
+Dashboard assets and API reads require Cloudflare Access, with JWT verification
+inside the Worker. Branch previews use a separate D1 database and Access audience.
+
+GitHub Actions validates changes. The existing Cloudflare Workers Builds
+integration deploys pushes to `main`, using `npm run build`,
+`npx wrangler deploy`, and root directory `/`. Direct Wrangler deployments also
+build the UI through the custom build configuration.
+
+Service deployment, database migrations, app integration rollout, and collection
+activation are separate steps. Follow the [setup guide](docs/SETUP.md) and
+[expanded analytics rollout](docs/EXPANDED-ANALYTICS.md); a passing dry-run does
+not migrate or deploy anything.
+
+## Project guide
+
+| Location | Contents |
+| --- | --- |
+| [`src/`](src/) | Worker, Access verification, metric/census contracts, report validation |
+| [`web/`](web/) | Dashboard views, charts, filters, and local report inspector |
+| [`migrations/`](migrations/) | Ordered D1 schema migrations |
+| [`test/`](test/) | Service, data-semantics, and preview-configuration regressions |
+| [`scripts/`](scripts/) | Clean-build verification and publication/privacy checks |
+| [`public/brand/`](public/brand/) | Reveal logo, wordmarks, and app icon |
+
+| Documentation | Details |
+| --- | --- |
+| [Setup & rollout](docs/SETUP.md) | Bindings, migrations, Access, builds, previews, and rollback |
+| [Privacy & consent](docs/PRIVACY.md) | Collection boundaries, consent, and infrastructure limits |
+| [Expanded analytics](docs/EXPANDED-ANALYTICS.md) | Measurement definitions, account permission, reports, and v2 rollout |
+| [Validation ledger](docs/VALIDATION.md) | Recorded local/hosted checks and unverified production work |
+| [Dashboard design](docs/DASHBOARD-DESIGN.md) | Interface behavior and measurement presentation |
+| [Brand](docs/BRAND.md) | Logo variants, palette, and icon exports |
+| [Public-source review](docs/PUBLICATION.md) | Bounded history review and ongoing commit/secret checks |
+
+Changes to the event vocabulary in [`src/contract.ts`](src/contract.ts) or the
+expanded schemas in [`src/expanded.ts`](src/expanded.ts) require coordinated app
+adapter changes and a privacy review. Keep changes focused, add regression
+coverage for behavior changes, and run the checks above before opening a pull
+request. Keep secrets, real reports, model files, and production data out of
+issues, tests, and commits.
