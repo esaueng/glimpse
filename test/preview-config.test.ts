@@ -1,12 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { readFileSync } from "node:fs";
-import { parseConfigFileTextToJson } from "typescript";
-
-const readConfig = (path: string) => {
-  const parsed = parseConfigFileTextToJson(path, readFileSync(path, "utf8"));
-  if (parsed.error) throw new Error(`Invalid JSONC: ${path}`);
-  return parsed.config;
-};
+import { readJsonConfig as readConfig } from "./json-config";
 describe("preview isolation", () => {
   it("keeps Preview data, migration targets and JWT audiences separate from production", () => {
     const config = readConfig("wrangler.jsonc");
