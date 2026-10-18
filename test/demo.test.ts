@@ -1,6 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { readFileSync } from "node:fs";
-import { parseConfigFileTextToJson } from "typescript";
+import { readJsonConfig } from "./json-config";
 import demoWorker from "../src/demo";
 import { demoStats } from "../web/demo-data";
 import { census, CENSUS_FIELDS } from "../src/expanded";
@@ -55,10 +54,7 @@ describe("synthetic demo", () => {
     expect(() => demoStats({ ...range, app: "unknown" }, now)).toThrow();
   });
   it("has no database, service binding, cron, or public workers.dev endpoint", () => {
-    const config = parseConfigFileTextToJson(
-      "demo",
-      readFileSync("wrangler.demo.jsonc", "utf8"),
-    ).config;
+    const config = readJsonConfig("wrangler.demo.jsonc");
     expect(config.name).toBe("glimpse-demo");
     expect(config.routes).toEqual([
       { pattern: "glimpse.esau.app/demo*", zone_name: "esau.app" },
