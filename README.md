@@ -25,8 +25,8 @@ aggregates; voluntarily shared diagnostic reports can be inspected locally.
 ## Try it
 
 [Open the public demo](https://glimpse.esau.app/demo) to explore the dashboard
-with fictional data. Try app, date, and collection filters; browse Storage,
-Diagnostics, and Privacy; or load the sample diagnostic report. All demo numbers
+with fictional data. Try the app and date filters; browse Issues, Storage, and
+Privacy; or load the sample diagnostic report. All demo numbers
 are generated in your browser, with no connection to live analytics.
 
 The demo runs on a separate `glimpse-demo` Worker with static assets only: no
@@ -36,18 +36,22 @@ D1 database, service bindings, ingestion, or credentials. Its files stay under
 
 ## Inside the dashboard
 
-- **Overview:** combined and per-app totals, daily activity, event breakdowns,
-  and coarse performance distributions.
-- **Storage:** OpenZCAD cloud account, project, revision, and storage snapshots;
-  saved project size and part-count observations for OpenZCAD and OpenFEA.
-- **Diagnostics:** fixed failure categories and feature-operation counts, plus a
-  local JSON report inspector with file and paste support.
+- **Overview:** utilization — opted-in cloud accounts, projects, and revisions
+  with growth, workspaces opened, per-app activity, top CAD operations, feature
+  categories, simulation workflow steps, and model complexity.
+- **Issues:** server errors, diagnostic codes, failed exports, solves, and
+  generations, cloud request failures, slow operations, and a local JSON report
+  inspector with file and paste support.
+- **Storage:** OpenZCAD cloud storage, growth, project sizes, and snapshot
+  history; saved, upload, and download size observations.
 - **Privacy:** collection definitions, consent scopes, retention, and measurement
   limits alongside the numbers.
 
 The dark, responsive interface includes UTC date ranges of up to 90 days,
-URL-backed filters, accessible data tables, and manual refresh. Empty,
-unsupported, unavailable, and stale results have distinct states.
+URL-backed filters, accessible data tables, and manual refresh. Basic and opt-in
+figures load side by side and stay labelled by source. Empty, unsupported,
+unavailable, and stale results have distinct states. Candidate metrics that are
+not collected yet are listed in [proposed metrics](docs/PROPOSED-METRICS.md).
 
 ### Application coverage
 
@@ -178,6 +182,7 @@ not migrate or deploy anything.
 | [Expanded analytics](docs/EXPANDED-ANALYTICS.md) | Measurement definitions, account permission, reports, and v2 rollout |
 | [Validation ledger](docs/VALIDATION.md) | Recorded local/hosted checks and unverified production work |
 | [Dashboard design](docs/DASHBOARD-DESIGN.md) | Interface behavior and measurement presentation |
+| [Proposed metrics](docs/PROPOSED-METRICS.md) | Candidate opt-in and snapshot metrics awaiting privacy review |
 | [Brand](docs/BRAND.md) | Logo variants, palette, and icon exports |
 | [Public-source review](docs/PUBLICATION.md) | Bounded history review and ongoing commit/secret checks |
 

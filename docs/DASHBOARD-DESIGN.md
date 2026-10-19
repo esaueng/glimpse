@@ -1,54 +1,61 @@
 # Dashboard implementation contract
 
-Direction: compact technical dark console, refined from the concept by the
-owner's request to replace side navigation with a top bar. Native React/CSS and
-SVG; no new chart/UI dependency, imagery, gradients, tracking or fonts fetched.
+Direction: "Aperture", a brand-led dark console built around the Reveal mark's
+pale blue. Native React/CSS and SVG; no new chart or UI dependency, imagery,
+gradients, tracking or fetched fonts (system sans and monospace stacks only,
+within the existing `style-src 'self'` policy).
 
-Top bar: G / Glimpse, Overview, Storage, Diagnostics, Privacy, Cloudflare Access /
-Only you. Main: heading and refresh/update state, app/collection/UTC date filters,
-scope notice, divided metrics strip, Daily activity / Application totals, Cloud
-document size / Diagnostics, collapsed Performance, local user-shared reports.
-Dynamic values and privacy/measurement corrections replace illustrative text.
-No unsupported OpenFEA accounts/storage totals, invented percent changes or
-unique visitor counts. Empty, unavailable and unsupported are distinct states.
+Top bar: Glimpse mark, segmented navigation (Overview, Issues, Storage,
+Privacy), access label. Toolbar: page title, app filter, UTC from/to dates with
+Apply, 7/30/90-day presets, last update and icon Refresh. One applied-scope line
+states that basic counts cover all users and opt-in figures cover opted-in
+users only. Every opt-in panel carries an "Opted-in users" badge or note.
 
-Palette: canvas #10151f, panel #192332, text #e8eef7, muted #a2b0c4, border
-#334154, control border #60718a, teal #56d8be, comparison #a9c9fa, error #ff97a6.
-System sans UI (14px, 1.45 line height), 28px headings, 18px panel headings,
-30px tabular monospace metric values. 4-6px radii, 16px gutters, 24-40px outer
-margins, 36px table rows. Top nav underline marks selection; keyboard focus is
-visible and charts provide tables/text alternatives.
+Data: each load runs two parallel queries for the same app and dates, one
+`basic` and one `optional`. Levels are never merged; panels name their source.
+The collection selector is gone. `view=diagnostics` links resolve to Issues.
 
-Analytical job: operational monitoring and comparison over time, category ranking
-and distributions. Primary route: React-owned SVG line charts and semantic HTML
-tables/bars; fallback is an expandable daily-data table. At most one time-series
-chart (90 points per app), three histograms and finite ranked tables visible.
-No live animation or polling; manual refresh shows last successful UTC update.
-Failed refresh preserves prior results marked stale and their applied scope.
-No automatic external request on report inspection.
+Pages:
 
-App, collection, date range and view are URL-backed; popstate restores them.
-Draft filters apply together. Storage/Diagnostics select Optional collection.
-On mobile, navigation stays in a top row with wrapping; the main values remain
-above charts, filters collapse with a native disclosure, and wide detailed tables
-scroll inside labelled containers. No hover-only essential values.
+- Overview, utilization: Total users shown as an explicit "Not collected" gap;
+  opted-in cloud accounts, projects and revisions from the latest OpenZCAD
+  snapshot with the change since the first snapshot in range; workspaces opened.
+  Cloud growth charts (accounts, projects), activity by app with each app's
+  main outputs and its share of API requests, top CAD operations, feature
+  categories, OpenFEA workflow steps and solver backend, and part-count ranges.
+- Issues: server errors with error rate, diagnostic codes, failed exports,
+  solver runs and generations with failure rates, cloud request failures.
+  Daily server-error and diagnostic charts, ranked diagnostic codes, cloud
+  status ranking, slow-operation share (10 s or more) per timing event, the
+  local report inspector, and a collapsed table of every opt-in bucket.
+- Storage: stored bytes with change in range, project data, storage overhead,
+  per-project and per-account averages, revisions and unknown-size artifacts;
+  stored and project data over time; snapshot project-size ranges; saved,
+  upload and download size observations; cloud saves under 1 s; daily snapshot
+  history in a scrolling table.
+- Privacy: unchanged collection boundaries and consent text.
 
-Reports are strict local files limited to 64 KiB and 128 unique aggregate rows,
-validated by the same schema as producers. Invalid files clear prior report state.
-Report rows never enter service totals. Clear and reload remove local report UI.
+Palette: canvas #0a0f18, surface #111a28, sunken #0d1420, line #22304a, soft
+line #1c2840, control #2c3d5c, text #eef3fb, muted #9db0cc, faint #8396b3,
+accent and OpenZCAD #a9c9fa, OpenFEA #e8eef7, OpenLattice3D and second tone
+#6f95cf, third tone #3e5a85, warning #f6c177, error #ff8a9c (text #ffa3b1).
+Apps are told apart by lightness as well as hue. 28px page titles, 16–18px
+section and panel titles, 30px tabular monospace tile values. 12px panel radii,
+6px control radii (squared buttons), 9px navigation group.
 
-Final fidelity ledger: top-bar navigation replaced the initial side rail at the
-owner's request; compact panels, 28px headings, 30px monospace metrics, original
-dark tokens and native filters are retained. Chart labels were enlarged; bar
-lengths now agree with percent shares. Applied scope is explicit. The merged
-third-app integration adds a comparison line and completed-outcome table column;
-no new third-app tracking is introduced. Daily data tables and Paste JSON are
-intentional accessible/local-report affordances. Native-size desktop and mobile
-renders were inspected with the concept using view_image; no material mismatch
-or mobile page overflow remains. Dynamic counts and native date formatting are
-intentional differences from illustrative concept data.
+Charts: React-owned SVG lines in a 1000×200 view box with non-scaling strokes;
+tick and date labels are HTML. At most four gridlines. Every line chart has a
+"Data table · UTC" disclosure with exact values. Bars, columns and stacked
+bars carry text values or an accessible label. No hover-only values, live
+animation or polling. Failed refresh keeps prior results and marks them stale.
 
-Overview copy was reduced at the owner's request: no subtitle, chart caption,
-explanatory panel paragraphs or footer. One compact applied-scope line retains
-opt-in, app/date and OpenZCAD snapshot context. Report inspection lives only in
-Diagnostics; definitions and privacy details remain in detailed views.
+Empty, unavailable and unsupported stay distinct: "—" for not yet received,
+"N/A" with the owning app named when the filter excludes it, and "Not collected"
+for metrics Glimpse does not record.
+
+Mobile (≤760px): navigation spans the width, filters collapse into a native
+disclosure, tiles reflow, wide tables scroll inside labelled regions, slow-
+operation bars move under their labels. No horizontal page overflow.
+
+Proposed metrics that are not collected yet are listed in
+[PROPOSED-METRICS.md](PROPOSED-METRICS.md) and are not rendered.
