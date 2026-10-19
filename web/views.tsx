@@ -5,6 +5,7 @@ import {
   Columns,
   LineChart,
   RankBars,
+  Sparkline,
   StackBar,
   sizeLabels,
   timingLabels,
@@ -160,7 +161,7 @@ export function Overview({ data, app }: { data: Loaded; app: string }) {
         <h2 id="people-heading" className="section-title">
           People and accounts
         </h2>
-        <div className="tiles">
+        <div className="strip">
           <Tile label="Total users" value="—" gap>
             Not collected. Glimpse keeps no per-person data.
           </Tile>
@@ -194,36 +195,42 @@ export function Overview({ data, app }: { data: Loaded; app: string }) {
         >
           {!cloud ? (
             <p className="empty">Cloud snapshots exist for OpenZCAD only.</p>
-          ) : history.length < 2 ? (
-            <p className="empty">
-              Growth needs at least two daily snapshots in this range.
-            </p>
+          ) : !latest || !first ? (
+            <p className="empty">No snapshot received in this range.</p>
           ) : (
-            <div className="stacked-charts">
-              {(["accounts", "projects"] as const).map((key) => (
-                <div key={key}>
-                  <div className="chart-title">
-                    <span>{capitalize(key)}</span>
-                    <span className="numeric">
-                      {number(first![key])} → {number(latest![key])}
+            <>
+              <ul className="growth">
+                {(
+                  [
+                    ["Accounts", "accounts", number],
+                    ["Projects", "projects", number],
+                    ["Revisions", "revisions", number],
+                    ["Stored", "storedBytes", bytes],
+                  ] as const
+                ).map(([name, key, format]) => (
+                  <li key={key}>
+                    <span className="growth-name">{name}</span>
+                    <Sparkline
+                      label={`${name} per day`}
+                      values={history.map((c) => c[key])}
+                    />
+                    <span className="numeric growth-range">
+                      {format(first[key])} → {format(latest[key])}
                     </span>
-                  </div>
-                  <LineChart
-                    label={`Opted-in cloud ${key}`}
-                    days={history.map((c) => c.day)}
-                    series={[
-                      {
-                        name: capitalize(key),
-                        values: history.map((c) => c[key]),
-                        tone: key === "accounts" ? "accent" : "fea",
-                      },
-                    ]}
-                    zeroBased={false}
-                    height={110}
-                  />
-                </div>
-              ))}
-            </div>
+                    <span className="numeric growth-change">
+                      {key === "storedBytes"
+                        ? `${latest[key] >= first[key] ? "+" : "−"}${bytes(Math.abs(latest[key] - first[key]))}`
+                        : signed(latest[key] - first[key])}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+              <span className="muted small">
+                {history.length} snapshot{history.length === 1 ? "" : "s"} ·{" "}
+                {shortDay(first.day)} – {shortDay(latest.day)} · daily
+                history on Storage
+              </span>
+            </>
           )}
         </Panel>
         <Panel title="Activity by app" note={<OptIn />} className="narrow">
@@ -441,7 +448,7 @@ export function Issues({
   const maxCode = Math.max(1, ...codes.map((c) => c.count));
   return (
     <>
-      <section className="tiles" aria-label="Issue summary">
+      <section className="strip" aria-label="Issue summary">
         <Tile label="Server errors (5xx)" value={number(serverErrors)}>
           {percent(serverErrors, requests, 2)} of requests · all users
         </Tile>

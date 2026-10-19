@@ -6,10 +6,20 @@ gradients, tracking or fetched fonts (system sans and monospace stacks only,
 within the existing `style-src 'self'` policy).
 
 Top bar: Glimpse mark, segmented navigation (Overview, Issues, Storage,
-Privacy), access label. Toolbar: page title, app filter, UTC from/to dates with
-Apply, 7/30/90-day presets, last update and icon Refresh. One applied-scope line
-states that basic counts cover all users and opt-in figures cover opted-in
-users only. Every opt-in panel carries an "Opted-in users" badge or note.
+Privacy), access label. Toolbar, one row: page title, timeframe picker, app
+select, last update and icon Refresh. Changes apply immediately. One
+applied-scope line states that basic counts cover all users and opt-in figures
+cover opted-in users only. Every opt-in panel carries an "Opted-in users" badge
+or note.
+
+Timeframe picker: a trigger showing a day-count badge and the formatted range
+opens a popover with rolling presets (past 7, 14, 30, 90 days), calendar presets
+in two columns (today/yesterday, this/previous week, this/previous month; weeks
+start Monday, all UTC) and a custom range with two date inputs. The selection
+shows a check mark. Presets are stored in the URL as `range=7d` and roll forward
+each UTC day; custom ranges store `from` and `to`. The default is past 30 days.
+Data is daily, so there are no sub-day options, and the API caps ranges at 90
+days. Escape and outside clicks close it and return focus to the trigger.
 
 Data: each load runs two parallel queries for the same app and dates, one
 `basic` and one `optional`. Levels are never merged; panels name their source.
@@ -17,13 +27,14 @@ The collection selector is gone. `view=diagnostics` links resolve to Issues.
 
 Pages:
 
-- Overview, utilization: Total users shown as an explicit "Not collected" gap;
-  opted-in cloud accounts, projects and revisions from the latest OpenZCAD
-  snapshot with the change since the first snapshot in range; workspaces opened.
-  Cloud growth charts (accounts, projects), activity by app with each app's
+- Overview, utilization: a five-cell stat strip with Total users shown as an
+  explicit "Not collected" gap; opted-in cloud accounts, projects and revisions
+  from the latest OpenZCAD snapshot with the change since the first snapshot in
+  range; workspaces opened. Cloud growth as compact sparkline rows (accounts,
+  projects, revisions, stored bytes with start, end and change), activity by app with each app's
   main outputs and its share of API requests, top CAD operations, feature
   categories, OpenFEA workflow steps and solver backend, and part-count ranges.
-- Issues: server errors with error rate, diagnostic codes, failed exports,
+- Issues: a six-cell stat strip of server errors with error rate, diagnostic codes, failed exports,
   solver runs and generations with failure rates, cloud request failures.
   Daily server-error and diagnostic charts, ranked diagnostic codes, cloud
   status ranking, slow-operation share (10 s or more) per timing event, the
@@ -40,7 +51,7 @@ line #1c2840, control #2c3d5c, text #eef3fb, muted #9db0cc, faint #8396b3,
 accent and OpenZCAD #a9c9fa, OpenFEA #e8eef7, OpenLattice3D and second tone
 #6f95cf, third tone #3e5a85, warning #f6c177, error #ff8a9c (text #ffa3b1).
 Apps are told apart by lightness as well as hue. 28px page titles, 16–18px
-section and panel titles, 30px tabular monospace tile values. 12px panel radii,
+section and panel titles, 26px tabular monospace strip values, 20px page gaps. 12px panel radii,
 6px control radii (squared buttons), 9px navigation group.
 
 Charts: React-owned SVG lines in a 1000×200 view box with non-scaling strokes;
@@ -53,8 +64,8 @@ Empty, unavailable and unsupported stay distinct: "—" for not yet received,
 "N/A" with the owning app named when the filter excludes it, and "Not collected"
 for metrics Glimpse does not record.
 
-Mobile (≤760px): navigation spans the width, filters collapse into a native
-disclosure, tiles reflow, wide tables scroll inside labelled regions, slow-
+Mobile (≤760px): navigation spans the width, the timeframe trigger and its
+popover span the width, stat strips reflow, wide tables scroll inside labelled regions, slow-
 operation bars move under their labels. No horizontal page overflow.
 
 Proposed metrics that are not collected yet are listed in
