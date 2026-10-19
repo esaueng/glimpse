@@ -80,6 +80,61 @@ export function dailySeries(data: Stats, event: string) {
     openlattice3d: totals.get(`${day}:openlattice3d`) ?? 0,
   }));
 }
+export type Loaded = { basic: Stats; optional: Stats };
+export const percent = (part: number, whole: number, digits = 1) =>
+  whole
+    ? `${((part / whole) * 100).toLocaleString(undefined, { maximumFractionDigits: digits, minimumFractionDigits: digits })}%`
+    : "—";
+export function bucketCounts(
+  rows: Row[],
+  event: string,
+  buckets: readonly string[],
+  app?: App,
+) {
+  return buckets.map((bucket) =>
+    rows.reduce(
+      (n, r) =>
+        n +
+        (r.event === event && r.bucket === bucket && (!app || r.app === app)
+          ? r.count
+          : 0),
+      0,
+    ),
+  );
+}
+export const isErrorCode = (row: Row) => row.event.startsWith("error_");
+export function errorCodes(rows: Row[]) {
+  const codes = new Map<string, { event: string; count: number; apps: App[] }>();
+  for (const r of rows.filter(isErrorCode)) {
+    const code = codes.get(r.event) ?? { event: r.event, count: 0, apps: [] };
+    code.count += r.count;
+    if (!code.apps.includes(r.app)) code.apps.push(r.app);
+    codes.set(r.event, code);
+  }
+  return [...codes.values()]
+    .map((c) => ({ ...c, apps: APPS.filter((a) => c.apps.includes(a)) }))
+    .sort((a, b) => b.count - a.count || a.event.localeCompare(b.event));
+}
+export function dailyTotals(data: Stats, event: string | ((row: Row) => boolean)) {
+  const match =
+    typeof event === "string" ? (r: Row) => r.event === event : event;
+  const totals = new Map<string, number>();
+  for (const row of data.rows)
+    if (match(row)) totals.set(row.day, (totals.get(row.day) ?? 0) + row.count);
+  return dailySeries(data, "").map(({ day }) => ({
+    day,
+    value: totals.get(day) ?? 0,
+  }));
+}
+// One snapshot per UTC day (latest generation), oldest first. Stocks, never summed.
+export function censusHistory(rows: CensusRow[]): CensusRow[] {
+  const days = new Map<string, CensusRow>();
+  for (const row of rows) {
+    const prior = days.get(row.day);
+    if (!prior || row.generation > prior.generation) days.set(row.day, row);
+  }
+  return [...days.values()].sort((a, b) => a.day.localeCompare(b.day));
+}
 export function latestCensus(rows: CensusRow[]): CensusRow | undefined {
   return rows.reduce<CensusRow | undefined>(
     (latest, row) =>

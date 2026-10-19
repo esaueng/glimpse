@@ -1,7 +1,4 @@
-import { useCompact } from "./useCompact";
-import type { Row } from "../src/contract";
-import { APPS, APP_NAMES, BUCKETS } from "../src/contract";
-import { dailySeries, number, type Stats } from "./data";
+import { number, percent } from "./data";
 export const sizeLabels = ["<1 MiB", "1–10 MiB", "10–100 MiB", "≥100 MiB"];
 export const timingLabels = [
   "<100 ms",
@@ -10,197 +7,283 @@ export const timingLabels = [
   "10–60 s",
   "≥60 s",
 ];
-export function Histogram({
-  labels,
-  values,
-}: {
-  labels: readonly string[];
+export type Tone =
+  | "accent"
+  | "fea"
+  | "lattice"
+  | "tone-2"
+  | "tone-3"
+  | "warn"
+  | "error";
+const color = (tone: Tone) => `var(--${tone})`;
+const shortDay = (day: string) =>
+  new Date(`${day}T00:00:00Z`).toLocaleDateString(undefined, {
+    day: "numeric",
+    month: "short",
+    timeZone: "UTC",
+  });
+function niceStep(span: number) {
+  const raw = Math.max(span, 1) / 3,
+    power = 10 ** Math.floor(Math.log10(raw)),
+    scaled = raw / power;
+  return (scaled <= 1 ? 1 : scaled <= 2 ? 2 : scaled <= 5 ? 5 : 10) * power;
+}
+export type Series = {
+  name: string;
   values: number[];
+  tone: Tone;
+  dashed?: boolean;
+};
+// Fluid SVG line chart. Values and labels stay in HTML; the table is the exact alternative.
+export function LineChart({
+  label,
+  days,
+  series,
+  height = 220,
+  zeroBased = true,
+  area = false,
+  peak = false,
+  format = number,
+  unit = 1,
+}: {
+  label: string;
+  days: string[];
+  series: Series[];
+  height?: number;
+  zeroBased?: boolean;
+  area?: boolean;
+  peak?: boolean;
+  format?: (value: number) => string;
+  /** Tick steps are chosen in multiples of this unit, e.g. 2 ** 30 for GiB. */
+  unit?: number;
 }) {
-  const sum = values.reduce((a, b) => a + b, 0);
-  return (
-    <table className="histogram">
-      <thead>
-        <tr>
-          <th>Range</th>
-          <th>Count</th>
-          <th>Share</th>
-        </tr>
-      </thead>
-      <tbody>
-        {labels.map((label, i) => (
-          <tr key={label}>
-            <td>{label}</td>
-            <td className="numeric">{number(values[i] ?? 0)}</td>
-            <td>
-              <div className="distribution">
-                <span className="track">
-                  <i
-                    style={{
-                      width: `${(sum ? (values[i] ?? 0) / sum : 0) * 100}%`,
-                    }}
-                  />
-                </span>
-                <span>
-                  {sum ? `${Math.round(((values[i] ?? 0) / sum) * 100)}%` : "—"}
-                </span>
-              </div>
-            </td>
-          </tr>
-        ))}
-      </tbody>
-    </table>
-  );
-}
-export function Timing({ rows, event }: { rows: Row[]; event: string }) {
-  const values = BUCKETS.map((bucket) =>
-    rows
-      .filter((r) => r.event === event && r.bucket === bucket)
-      .reduce((n, r) => n + r.count, 0),
-  );
-  return <Histogram labels={timingLabels} values={values} />;
-}
-export function Activity({ data, event }: { data: Stats; event: string }) {
-  const compact = useCompact(),
-    width = compact ? 360 : 780,
-    height = compact ? 200 : 156,
-    left = compact ? 35 : 50,
-    right = width - 20;
-  const series = dailySeries(data, event),
-    max = Math.max(1, ...series.flatMap((r) => APPS.map((app) => r[app])));
-  const top = Math.ceil(max / 4) * 4;
+  const all = series.flatMap((s) => s.values),
+    high = Math.max(1, ...all),
+    low = zeroBased ? 0 : Math.min(...all);
+  let step = niceStep((high - low) / unit) * unit,
+    bottom = 0,
+    top = 0;
+  // At most four gridlines; a coarser step keeps small panels readable.
+  do {
+    bottom = zeroBased ? 0 : Math.floor(low / step) * step;
+    top = Math.max(bottom + step, Math.ceil((high * 1.02) / step) * step);
+  } while ((top - bottom) / step > 4 && (step *= 2));
+  const ticks: number[] = [];
+  for (let t = bottom + step; t <= top + step / 2; t += step) ticks.push(t);
   const x = (i: number) =>
-      left + (i / Math.max(1, series.length - 1)) * (right - left),
-    y = (value: number) =>
-      (compact ? 162 : 122) - (value / top) * (compact ? 134 : 98);
-  const shown = APPS;
+      days.length > 1 ? (i / (days.length - 1)) * 1000 : 500,
+    y = (v: number) => 190 - ((v - bottom) / (top - bottom)) * 180;
+  const path = (values: number[]) =>
+    values
+      .map((v, i) => `${i ? "L" : "M"}${x(i).toFixed(1)},${y(v).toFixed(1)}`)
+      .join(" ");
+  const first = series[0],
+    peakIndex = first
+      ? first.values.reduce((best, v, i, a) => (v > a[best]! ? i : best), 0)
+      : 0;
+  const empty = !all.some((v) => v > 0);
   return (
-    <section className="panel activity-panel">
-      <div className="panel-heading">
-        <h2>{event === "api_request" ? "API requests" : "Workspace opens"}</h2>
-        <div className="legend">
-          {APPS.filter(
-            (app) => data.range.app === "all" || data.range.app === app,
-          ).map((app) => (
-            <span
-              key={app}
-              className={
-                app === "openzcad"
-                  ? "cad-key"
-                  : app === "openfea"
-                    ? "fea-key"
-                    : "lattice-key"
-              }
-            >
-              {APP_NAMES[app]}
+    <figure className="line-chart">
+      <div className="chart-plot" style={{ height }}>
+        <svg
+          viewBox="0 0 1000 200"
+          preserveAspectRatio="none"
+          role="img"
+          aria-label={`${label}. ${series
+            .map(
+              (s) =>
+                `${s.name} from ${format(s.values[0] ?? 0)} to ${format(s.values.at(-1) ?? 0)}`,
+            )
+            .join("; ")}. Exact values are in the data table.`}
+        >
+          {ticks.map((t) => (
+            <line key={t} className="grid-line" x1="0" x2="1000" y1={y(t)} y2={y(t)} />
+          ))}
+          <line className="axis-line" x1="0" x2="1000" y1="190" y2="190" />
+          {area && first && (
+            <path
+              d={`${path(first.values)} L1000,190 L0,190 Z`}
+              style={{ fill: color(first.tone) }}
+              className="area"
+            />
+          )}
+          {series.map((s) => (
+            <path
+              key={s.name}
+              d={path(s.values)}
+              className={s.dashed ? "series dashed" : "series"}
+              style={{ stroke: color(s.tone) }}
+            />
+          ))}
+        </svg>
+        <div className="tick-labels" aria-hidden="true">
+          {ticks.map((t) => (
+            <span key={t} style={{ top: `calc(${(y(t) / 200) * 100}% - 15px)` }}>
+              {format(t)}
             </span>
           ))}
         </div>
+        {peak && first && !empty && days.length > 1 && (
+          <div
+            className="peak"
+            aria-hidden="true"
+            style={{
+              left: `${x(peakIndex) / 10}%`,
+              top: `${(y(first.values[peakIndex]!) / 200) * 100}%`,
+            }}
+          >
+            <i style={{ borderColor: color(first.tone) }} />
+            <span className={peakIndex > days.length * 0.75 ? "end" : undefined}>
+              <small>{shortDay(days[peakIndex]!)}</small>
+              {format(first.values[peakIndex]!)}
+            </span>
+          </div>
+        )}
+        {empty && <p className="chart-empty">No data in this range.</p>}
       </div>
-      <svg
-        className="activity-chart"
-        viewBox={`0 0 ${width} ${height}`}
-        role="img"
-        aria-label={`Daily ${event === "api_request" ? "API requests" : "workspace opens"} by app. Exact values in the daily data table.`}
-      >
-        {[0, 1, 2, 3, 4].map((i) => (
-          <g key={i}>
-            <line
-              x1={left}
-              x2={right}
-              y1={y((top * i) / 4)}
-              y2={y((top * i) / 4)}
-              className="grid-line"
-            />
-            <text x={left - 10} y={y((top * i) / 4) + 4} textAnchor="end">
-              {number((top * i) / 4)}
-            </text>
-          </g>
-        ))}
-        {shown
-          .filter((app) => data.range.app === "all" || data.range.app === app)
-          .map((app) => (
-            <g
-              key={app}
-              className={
-                app === "openzcad"
-                  ? "cad-series"
-                  : app === "openfea"
-                    ? "fea-series"
-                    : "lattice-series"
-              }
-            >
-              <polyline
-                fill="none"
-                strokeWidth="2"
-                points={series.map((r, i) => `${x(i)},${y(r[app])}`).join(" ")}
-              />
-              {series.map((r, i) => (
-                <circle
-                  key={r.day}
-                  cx={x(i)}
-                  cy={y(r[app])}
-                  r={series.length > 45 ? 1.7 : 2.7}
-                >
-                  <title>{`${r.day} · ${app} · ${r[app]}`}</title>
-                </circle>
-              ))}
-            </g>
-          ))}
-        {[
-          ...new Set([
-            0,
-            Math.floor((series.length - 1) / 2),
-            series.length - 1,
-          ]),
-        ]
-          .filter((i) => i >= 0)
+      <div className="x-labels" aria-hidden="true">
+        {[...new Set([0, Math.floor((days.length - 1) / 2), days.length - 1])]
+          .filter((i) => i >= 0 && days[i])
           .map((i) => (
-            <text
-              key={i}
-              x={x(i)}
-              y={height - 10}
-              textAnchor={
-                i === 0 ? "start" : i === series.length - 1 ? "end" : "middle"
-              }
-            >
-              {series[i]?.day}
-            </text>
+            <span key={i}>{shortDay(days[i]!)}</span>
           ))}
-      </svg>
-      {!series.some((r) => APPS.some((app) => r[app])) && (
-        <p className="empty-inline">No activity in this date range.</p>
-      )}
+      </div>
       <details className="data-disclosure">
-        <summary>Daily data table · UTC</summary>
-        <div
-          className="table-scroll"
-          tabIndex={0}
-          role="region"
-          aria-label="Daily activity table"
-        >
+        <summary>Data table · UTC</summary>
+        <div className="table-scroll" tabIndex={0} role="region" aria-label={`${label} data`}>
           <table>
             <thead>
               <tr>
                 <th>Date</th>
-                <th>OpenZCAD</th>
-                <th>OpenFEA</th>
-                <th>OpenLattice3D</th>
+                {series.map((s) => (
+                  <th key={s.name}>{s.name}</th>
+                ))}
               </tr>
             </thead>
             <tbody>
-              {series.map((r) => (
-                <tr key={r.day}>
-                  <td>{r.day}</td>
-                  <td className="numeric">{number(r.openzcad)}</td>
-                  <td className="numeric">{number(r.openfea)}</td>
-                  <td className="numeric">{number(r.openlattice3d)}</td>
+              {days.map((day, i) => (
+                <tr key={day}>
+                  <td>{day}</td>
+                  {series.map((s) => (
+                    <td key={s.name} className="numeric">
+                      {format(s.values[i] ?? 0)}
+                    </td>
+                  ))}
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
       </details>
-    </section>
+    </figure>
+  );
+}
+export type Segment = { name: string; value: number; tone: Tone };
+export function StackBar({
+  label,
+  segments,
+  legend = true,
+}: {
+  label: string;
+  segments: Segment[];
+  legend?: boolean;
+}) {
+  const sum = segments.reduce((n, s) => n + s.value, 0);
+  return (
+    <div className="stack">
+      <div
+        className="stack-bar"
+        role="img"
+        aria-label={
+          sum
+            ? `${label}: ${segments.map((s) => `${s.name} ${percent(s.value, sum)}`).join(", ")}`
+            : `${label}: no data`
+        }
+      >
+        {sum ? (
+          segments.map((s) =>
+            s.value ? (
+              <i
+                key={s.name}
+                style={{ flexGrow: s.value, background: color(s.tone) }}
+              />
+            ) : null,
+          )
+        ) : (
+          <i className="none" />
+        )}
+      </div>
+      {legend && (
+        <ul className="legend" aria-hidden="true">
+          {segments.map((s) => (
+            <li key={s.name}>
+              <span className="swatch" style={{ background: color(s.tone) }} />
+              {s.name}
+              {sum ? ` ${percent(s.value, sum)}` : ""}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+export function RankBars({
+  items,
+  tone = "accent",
+  empty = "No data in this range.",
+}: {
+  items: { label: string; value: number; title?: string }[];
+  tone?: Tone;
+  empty?: string;
+}) {
+  const max = Math.max(1, ...items.map((i) => i.value));
+  return items.length ? (
+    <ol className="rank-bars">
+      {items.map((item) => (
+        <li key={item.label} title={item.title}>
+          <span className="rank-label">{item.label}</span>
+          <span className="track">
+            <i style={{ width: `${(item.value / max) * 100}%`, background: color(tone) }} />
+          </span>
+          <span className="numeric">{number(item.value)}</span>
+        </li>
+      ))}
+    </ol>
+  ) : (
+    <p className="empty">{empty}</p>
+  );
+}
+export function Columns({
+  items,
+  tone = "accent",
+  show = "value",
+  height = 120,
+}: {
+  items: { label: string; value: number; tone?: Tone }[];
+  tone?: Tone;
+  show?: "value" | "share";
+  height?: number;
+}) {
+  const max = Math.max(1, ...items.map((i) => i.value)),
+    sum = items.reduce((n, i) => n + i.value, 0);
+  return sum ? (
+    <ol className="columns" style={{ gridTemplateColumns: `repeat(${items.length}, minmax(0, 1fr))` }}>
+      {items.map((item) => (
+        <li key={item.label}>
+          <span className="numeric">
+            {show === "share" ? percent(item.value, sum) : number(item.value)}
+          </span>
+          <i
+            style={{
+              height: Math.max(3, (item.value / max) * height),
+              background: color(item.tone ?? tone),
+            }}
+          />
+          <span className="column-label">{item.label}</span>
+        </li>
+      ))}
+    </ol>
+  ) : (
+    <p className="empty">No data in this range.</p>
   );
 }
