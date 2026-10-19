@@ -178,6 +178,37 @@ export function LineChart({
     </figure>
   );
 }
+// Trend only: no axes. Exact start and end values sit beside it in text.
+export function Sparkline({
+  label,
+  values,
+  tone = "accent",
+}: {
+  label: string;
+  values: number[];
+  tone?: Tone;
+}) {
+  if (values.length < 2) return <span className="sparkline" aria-hidden="true" />;
+  const high = Math.max(...values),
+    low = Math.min(...values),
+    y = (v: number) => (high === low ? 12 : 21 - ((v - low) / (high - low)) * 18);
+  return (
+    <svg
+      className="sparkline"
+      viewBox="0 0 100 24"
+      preserveAspectRatio="none"
+      role="img"
+      aria-label={`${label}: ${number(values[0]!)} to ${number(values.at(-1)!)}`}
+    >
+      <path
+        d={values
+          .map((v, i) => `${i ? "L" : "M"}${((i / (values.length - 1)) * 100).toFixed(2)},${y(v).toFixed(2)}`)
+          .join(" ")}
+        style={{ stroke: color(tone) }}
+      />
+    </svg>
+  );
+}
 export type Segment = { name: string; value: number; tone: Tone };
 export function StackBar({
   label,

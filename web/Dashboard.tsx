@@ -1,27 +1,38 @@
 import { useEffect, useRef, useState } from "react";
 import { dateRange } from "../src/contract";
 import { appName, type Loaded, type Range, type Stats } from "./data";
-import { useCompact } from "./useCompact";
+import { RangePicker } from "./RangePicker";
+import { formatRange, isPreset, presetRange, type Preset } from "./ranges";
 import { Issues, Overview, Storage } from "./views";
 import "./style.css";
 const views = ["Overview", "Issues", "Storage", "Privacy"] as const;
 type View = (typeof views)[number];
 // Earlier links used view=diagnostics; the collection level is now chosen per panel.
 const legacyViews: Record<string, View> = { diagnostics: "Issues" };
-type Scope = { app: string; from: string; to: string };
-const today = () => new Date().toISOString().slice(0, 10);
-const daysAgo = (n: number) =>
-  new Date(Date.now() - n * 86400000).toISOString().slice(0, 10);
+type Scope = { app: string; from: string; to: string; preset?: Preset };
 function readLocation(): { range: Scope; view: View } {
   const query = new URLSearchParams(location.search),
-    view = query.get("view") ?? "";
-  query.delete("view");
-  query.delete("level");
+    view = query.get("view") ?? "",
+    preset =
+      query.get("range") ??
+      (query.has("from") || query.has("to") ? null : "30d");
+  for (const key of ["view", "level", "range"]) query.delete(key);
+  // A preset in the URL rolls forward with the current UTC day.
+  if (isPreset(preset)) {
+    const { from, to } = presetRange(preset);
+    query.set("from", from);
+    query.set("to", to);
+  }
   const parsed = dateRange(query);
   return {
     range: parsed
-      ? { app: parsed.app, from: parsed.from, to: parsed.to }
-      : { app: "all", from: daysAgo(29), to: today() },
+      ? {
+          app: parsed.app,
+          from: parsed.from,
+          to: parsed.to,
+          ...(isPreset(preset) ? { preset } : {}),
+        }
+      : { app: "all", ...presetRange("30d"), preset: "30d" },
     view:
       views.find((v) => v.toLowerCase() === view) ??
       legacyViews[view] ??
@@ -91,27 +102,27 @@ export function Dashboard({
   loadStats: (range: Range, signal: AbortSignal) => Promise<Stats>;
   demo?: boolean;
 }) {
-  const compact = useCompact();
-  const [filtersOpen, setFiltersOpen] = useState(!compact);
-  useEffect(() => setFiltersOpen(!compact), [compact]);
   const [initial] = useState(readLocation),
     [view, setView] = useState<View>(initial.view),
-    [draft, setDraft] = useState(initial.range),
     [filter, setFilter] = useState(initial.range);
   const [data, setData] = useState<Loaded | null>(null),
     [loading, setLoading] = useState(true),
     [error, setError] = useState("");
   const sequence = useRef(0);
   function apply(range: Scope, nextView = view, push = true) {
-    setDraft(range);
     setFilter({ ...range });
     setView(nextView);
-    if (push)
+    if (push) {
+      const { preset, ...dates } = range;
       history.pushState(
         null,
         "",
-        `?${new URLSearchParams({ ...range, view: nextView.toLowerCase() })}`,
+        `?${new URLSearchParams({
+          ...(preset ? { app: range.app, range: preset } : dates),
+          view: nextView.toLowerCase(),
+        })}`,
       );
+    }
   }
   useEffect(() => {
     const restore = () => {
@@ -127,9 +138,10 @@ export function Dashboard({
     setLoading(true);
     setError("");
     // Basic and opt-in aggregates stay separate queries; each panel names its source.
+    const { app, from, to } = filter;
     void Promise.all([
-      loadStats({ ...filter, level: "basic" }, controller.signal),
-      loadStats({ ...filter, level: "optional" }, controller.signal),
+      loadStats({ app, from, to, level: "basic" }, controller.signal),
+      loadStats({ app, from, to, level: "optional" }, controller.signal),
     ])
       .then(([basic, optional]) => {
         if (current === sequence.current) setData({ basic, optional });
@@ -144,8 +156,6 @@ export function Dashboard({
     return () => controller.abort();
   }, [filter, loadStats]);
   const applied = data?.basic.range ?? { ...filter, level: "basic" };
-  const preset = (days: number) =>
-    apply({ ...draft, from: daysAgo(days - 1), to: today() });
   return (
     <>
       <header className="topbar">
@@ -208,104 +218,63 @@ export function Dashboard({
         <div className="toolbar">
           <h1>{view}</h1>
           {view !== "Privacy" && (
-            <details
-              className="filters"
-              open={filtersOpen}
-              onToggle={(e) => setFiltersOpen(e.currentTarget.open)}
-            >
-              <summary>
-                Filters · {appName(filter.app)} · {filter.from} – {filter.to}
-              </summary>
-              <form
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  apply(draft);
-                }}
-              >
-                <label>
-                  <span>App</span>
-                  <select
-                    value={draft.app}
-                    onChange={(e) => setDraft({ ...draft, app: e.target.value })}
-                  >
-                    <option value="all">All apps</option>
-                    <option value="openzcad">OpenZCAD</option>
-                    <option value="openfea">OpenFEA</option>
-                    <option value="openlattice3d">OpenLattice3D</option>
-                  </select>
-                </label>
-                <label>
-                  <span>From</span>
-                  <input
-                    required
-                    type="date"
-                    value={draft.from}
-                    max={draft.to}
-                    onChange={(e) => setDraft({ ...draft, from: e.target.value })}
-                  />
-                </label>
-                <label>
-                  <span>To</span>
-                  <input
-                    required
-                    type="date"
-                    value={draft.to}
-                    min={draft.from}
-                    max={today()}
-                    onChange={(e) => setDraft({ ...draft, to: e.target.value })}
-                  />
-                </label>
-                <span className="utc">UTC</span>
-                <button className="primary" disabled={loading}>
-                  Apply
-                </button>
-                <span className="presets" role="group" aria-label="Quick ranges">
-                  {[7, 30, 90].map((days) => (
-                    <button key={days} type="button" disabled={loading} onClick={() => preset(days)}>
-                      {days}d
-                    </button>
-                  ))}
+            <div className="controls">
+              <RangePicker
+                value={filter}
+                onChange={(t) => apply({ app: filter.app, ...t })}
+              />
+              <label className="app-select">
+                <span className="sr-only">App</span>
+                <select
+                  value={filter.app}
+                  onChange={(e) => apply({ ...filter, app: e.target.value })}
+                >
+                  <option value="all">All apps</option>
+                  <option value="openzcad">OpenZCAD</option>
+                  <option value="openfea">OpenFEA</option>
+                  <option value="openlattice3d">OpenLattice3D</option>
+                </select>
+              </label>
+              <div className="refresh">
+                <span className="status" role="status" aria-live="polite">
+                  {loading
+                    ? "Loading…"
+                    : error
+                      ? ""
+                      : data
+                        ? demo
+                          ? "Synthetic data"
+                          : `Updated ${new Date(data.basic.receivedAt).toISOString().slice(11, 16)} UTC`
+                        : "Awaiting data"}
                 </span>
-              </form>
-            </details>
-          )}
-          {view !== "Privacy" && (
-            <div className="refresh">
-              <span>
-                {data
-                  ? demo
-                    ? "Synthetic data"
-                    : `Updated ${new Date(data.basic.receivedAt).toISOString().slice(11, 16)} UTC`
-                  : "Awaiting data"}
-              </span>
-              <button
-                type="button"
-                aria-label="Refresh"
-                disabled={loading}
-                onClick={() => setFilter({ ...filter })}
-              >
-                <svg viewBox="0 0 24 24" aria-hidden="true">
-                  <path d="M21 12a9 9 0 1 1-3-6.7L21 8" />
-                  <path d="M21 3v5h-5" />
-                </svg>
-              </button>
+                <button
+                  type="button"
+                  aria-label="Refresh"
+                  title="Refresh"
+                  disabled={loading}
+                  onClick={() => setFilter({ ...filter })}
+                >
+                  <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M21 12a9 9 0 1 1-3-6.7L21 8" />
+                    <path d="M21 3v5h-5" />
+                  </svg>
+                </button>
+              </div>
             </div>
           )}
         </div>
         {view !== "Privacy" && (
-          <p className="scope" role="status" aria-live="polite">
-            {loading ? (
-              "Loading aggregates…"
-            ) : error ? (
-              <span className="error-message">
+          <p className="scope">
+            {error ? (
+              <span className="error-message" role="alert">
                 {error}
                 {data ? " Showing stale results for the last successful scope." : ""}
               </span>
             ) : (
               <>
-                {appName(applied.app)} · {applied.from} – {applied.to} UTC ·
-                Basic counts cover all users; opt-in figures cover opted-in
-                users only.
+                {appName(applied.app)} · {formatRange(applied.from, applied.to)}{" "}
+                UTC · Basic counts cover all users; opt-in figures cover
+                opted-in users only.
               </>
             )}
           </p>
