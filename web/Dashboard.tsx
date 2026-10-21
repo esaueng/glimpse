@@ -107,7 +107,9 @@ export function Dashboard({
     [filter, setFilter] = useState(initial.range);
   const [data, setData] = useState<Loaded | null>(null),
     [loading, setLoading] = useState(true),
-    [error, setError] = useState("");
+    [error, setError] = useState(""),
+    [refresh, setRefresh] = useState(0);
+  const { app, from, to } = filter;
   const sequence = useRef(0);
   function apply(range: Scope, nextView = view, push = true) {
     setFilter({ ...range });
@@ -138,7 +140,6 @@ export function Dashboard({
     setLoading(true);
     setError("");
     // Basic and opt-in aggregates stay separate queries; each panel names its source.
-    const { app, from, to } = filter;
     void Promise.all([
       loadStats({ app, from, to, level: "basic" }, controller.signal),
       loadStats({ app, from, to, level: "optional" }, controller.signal),
@@ -154,7 +155,7 @@ export function Dashboard({
         if (current === sequence.current) setLoading(false);
       });
     return () => controller.abort();
-  }, [filter, loadStats]);
+  }, [app, from, to, refresh, loadStats]);
   const applied = data?.basic.range ?? { ...filter, level: "basic" };
   return (
     <>
@@ -252,7 +253,10 @@ export function Dashboard({
                   aria-label="Refresh"
                   title="Refresh"
                   disabled={loading}
-                  onClick={() => setFilter((current) => ({ ...current, ...refreshedTimeframe(current) }))}
+                  onClick={() => {
+                    setFilter((current) => ({ ...current, ...refreshedTimeframe(current) }));
+                    setRefresh((current) => current + 1);
+                  }}
                 >
                   <svg viewBox="0 0 24 24" aria-hidden="true">
                     <path d="M21 12a9 9 0 1 1-3-6.7L21 8" />
