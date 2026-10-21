@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { dateRange } from "../src/contract";
 import { appName, type Loaded, type Range, type Stats } from "./data";
 import { RangePicker } from "./RangePicker";
-import { formatRange, isPreset, presetRange, type Preset } from "./ranges";
+import { formatRange, isPreset, presetRange, refreshedTimeframe, type Preset } from "./ranges";
 import { Issues, Overview, Storage } from "./views";
 import "./style.css";
 const views = ["Overview", "Issues", "Storage", "Privacy"] as const;
@@ -252,7 +252,7 @@ export function Dashboard({
                   aria-label="Refresh"
                   title="Refresh"
                   disabled={loading}
-                  onClick={() => setFilter({ ...filter })}
+                  onClick={() => setFilter((current) => ({ ...current, ...refreshedTimeframe(current) }))}
                 >
                   <svg viewBox="0 0 24 24" aria-hidden="true">
                     <path d="M21 12a9 9 0 1 1-3-6.7L21 8" />

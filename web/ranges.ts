@@ -11,6 +11,12 @@ export type Preset =
   | "prev-week"
   | "this-month"
   | "prev-month";
+export type Timeframe = { from: string; to: string; preset?: Preset };
+
+/** Resolve a rolling choice at the time of refresh; explicit dates stay fixed. */
+export function refreshedTimeframe(value: Timeframe, now = new Date()): Timeframe {
+  return value.preset ? { ...value, ...presetRange(value.preset, now) } : { ...value };
+}
 export const rollingPresets: { id: Preset; label: string }[] = [
   { id: "7d", label: "Past 7 days" },
   { id: "14d", label: "Past 14 days" },
