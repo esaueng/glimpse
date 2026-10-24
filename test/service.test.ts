@@ -200,7 +200,7 @@ describe("privacy contract", () => {
 });
 describe("real Worker RPC, D1 and Access JWT", () => {
   it("fails closed for all dashboard surfaces and public HTTP ingest", async () => {
-    for (const path of ["/", "/assets/app.js", "/api/stats", "/ingest"])
+    for (const path of ["/", "/assets/app.js", "/api/stats", "/api/cloudflare", "/api/cloudflare/settings", "/ingest"])
       expect(
         (await mf.dispatchFetch("https://glimpse.test" + path)).status,
       ).toBe(401);

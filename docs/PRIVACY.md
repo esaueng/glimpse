@@ -1,5 +1,14 @@
 # Glimpse privacy and consent review
 
+The application-analytics statements below apply to the existing app counters,
+consent-gated aggregates and local reports. The separate, owner-authorized
+[Cloudflare infrastructure monitor](CLOUDFLARE.md) stores resource names/IDs,
+ownership mappings, daily infrastructure usage, subscriptions and costs in private
+`cf_*` tables with up to 400 days of daily history. It excludes customer/visitor
+identities and model data. Its credentials and real data never enter the public
+demo or repository. Infrastructure monitoring does not expand browser analytics
+or change any application's consent controls.
+
 Reviewed 15 October 2026. This records a technical approach and its limits; it is not a blanket legal exemption or a production compliance certification.
 
 ## Two distinct purposes

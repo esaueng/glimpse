@@ -2,6 +2,8 @@ import { WorkerEntrypoint } from "cloudflare:workers";
 import { census, CENSUS_FIELDS } from "./expanded";
 import { authorized } from "./auth";
 import { dateRange, metric, type App } from "./contract";
+import { cloudflareApi } from "./cloudflare/api";
+import { collect } from "./cloudflare/collect";
 export async function record(
   env: Pick<Env, "DB">,
   app: App,
@@ -82,6 +84,24 @@ export default {
       return protect(new Response(request.method === "HEAD" ? null : "ok"));
     if (!(await authorized(request, env)))
       return protect(new Response("Authentication required", { status: 401 }));
+    if (
+      url.pathname === "/api/cloudflare" ||
+      url.pathname.startsWith("/api/cloudflare/")
+    ) {
+      try {
+        return protect(await cloudflareApi(request, env));
+      } catch {
+        return protect(
+          Response.json(
+            {
+              error:
+                "Cloudflare monitor unavailable. Check its migration and connection.",
+            },
+            { status: 503 },
+          ),
+        );
+      }
+    }
     if (!["GET", "HEAD"].includes(request.method))
       return protect(
         new Response("Method not allowed", {
@@ -135,7 +155,11 @@ export default {
       );
     }
   },
-  async scheduled(_controller, env) {
+  async scheduled(controller, env) {
+    if (controller.cron === "17 * * * *") {
+      await collect(env);
+      return;
+    }
     await env.DB.batch(
       ["daily_counts", "daily_census"].map((table) =>
         env.DB.prepare(
