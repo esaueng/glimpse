@@ -460,8 +460,10 @@ describe("Cloudflare collection and protected settings persistence", () => {
         })
       ).status,
     ).toBe(413);
-    await mf.dispatchFetch("https://example.test/_test/collect");
     const db = await mf.getD1Database("DB");
+    // Exercise daily rediscovery rather than only the hourly usage refresh.
+    await db.prepare("DELETE FROM cf_state WHERE key='discovered'").run();
+    await mf.dispatchFetch("https://example.test/_test/collect");
     expect(
       await db
         .prepare("SELECT app,manual FROM cf_resources WHERE id='D1:sample-db'")
