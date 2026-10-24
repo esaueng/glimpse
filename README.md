@@ -46,6 +46,9 @@ D1 database, service bindings, ingestion, or credentials. Its files stay under
   history; saved, upload, and download size observations.
 - **Privacy:** collection definitions, consent scopes, retention, and measurement
   limits alongside the numbers.
+- **Cloudflare:** Esau metered costs, subscriptions, app/resource usage, allocated
+  cost estimates, budgets and collection coverage. See the
+  [connection and rollout guide](docs/CLOUDFLARE.md); activation is separate.
 
 The dark, responsive interface includes UTC date ranges of up to 90 days,
 URL-backed filters, accessible data tables, and manual refresh. Basic and opt-in

@@ -22,12 +22,14 @@
     },
   ],
   "vars": {
+    "CF_MONITOR_ENABLED": "false",
     "ACCESS_ISSUER": "https://esau.cloudflareaccess.com",
     "ACCESS_AUD": "1207bdb7d60dadda07f486a5e3547c4c74ceb8688dc42a77002f64d29e2eebcb",
   },
   // Preview data and JWT audience are independent of production.
   "previews": {
     "vars": {
+      "CF_MONITOR_ENABLED": "false",
       "ACCESS_ISSUER": "https://esau.cloudflareaccess.com",
       "ACCESS_AUD": "bbf706b5fc360ae01633aa2f477418193ea388e5870ad9124074b3320642a699"
     },
@@ -39,7 +41,7 @@
       }
     ]
   },
-  "triggers": { "crons": ["31 3 * * *"] },
+  "triggers": { "crons": ["31 3 * * *", "17 * * * *"] },
   "observability": {
     "enabled": false,
     "logs": { "enabled": false, "invocation_logs": false },

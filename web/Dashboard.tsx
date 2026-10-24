@@ -2,10 +2,27 @@ import { useEffect, useRef, useState } from "react";
 import { dateRange } from "../src/contract";
 import { appName, type Loaded, type Range, type Stats } from "./data";
 import { RangePicker } from "./RangePicker";
-import { formatRange, isPreset, presetRange, refreshedTimeframe, type Preset } from "./ranges";
+import {
+  formatRange,
+  isPreset,
+  presetRange,
+  refreshedTimeframe,
+  type Preset,
+} from "./ranges";
 import { Issues, Overview, Storage } from "./views";
+import {
+  CloudflarePage,
+  type MonitorLoader,
+  type SettingsWriter,
+} from "./Cloudflare";
 import "./style.css";
-const views = ["Overview", "Issues", "Storage", "Privacy"] as const;
+const views = [
+  "Overview",
+  "Issues",
+  "Storage",
+  "Cloudflare",
+  "Privacy",
+] as const;
 type View = (typeof views)[number];
 // Earlier links used view=diagnostics; the collection level is now chosen per panel.
 const legacyViews: Record<string, View> = { diagnostics: "Issues" };
@@ -55,7 +72,7 @@ function Privacy() {
         distributions and OpenFEA solver outcomes. Cloud totals have a separate
         OpenZCAD account permission that expires after 30 days.
       </p>
-      <h3>What never enters Glimpse</h3>
+      <h3>What never enters application analytics</h3>
       <p>
         Model contents, geometry, filenames, project names, emails, account or
         project IDs, URLs, raw messages or stacks, cookies, fingerprints,
@@ -92,14 +109,25 @@ function Privacy() {
         infrastructure retention review before activation. This dashboard does
         not certify legal compliance.
       </p>
+      <h3>Cloudflare infrastructure monitoring</h3>
+      <p>
+        The separate owner-authorized Cloudflare page stores infrastructure
+        resource names and IDs, app mappings, aggregate usage and costs for up
+        to 400 days. It does not collect customer identities or model data.
+        Public demo data is fictional.
+      </p>
     </section>
   );
 }
 export function Dashboard({
   loadStats,
+  loadCloudflare,
+  writeCloudflare,
   demo = false,
 }: {
   loadStats: (range: Range, signal: AbortSignal) => Promise<Stats>;
+  loadCloudflare?: MonitorLoader;
+  writeCloudflare?: SettingsWriter;
   demo?: boolean;
 }) {
   const [initial] = useState(readLocation),
@@ -110,6 +138,7 @@ export function Dashboard({
     [error, setError] = useState(""),
     [refresh, setRefresh] = useState(0);
   const { app, from, to } = filter;
+  const analyticsView = view !== "Cloudflare" && view !== "Privacy";
   const sequence = useRef(0);
   function apply(range: Scope, nextView = view, push = true) {
     setFilter({ ...range });
@@ -135,6 +164,7 @@ export function Dashboard({
     return () => window.removeEventListener("popstate", restore);
   }, []);
   useEffect(() => {
+    if (!analyticsView) return;
     const current = ++sequence.current,
       controller = new AbortController();
     setLoading(true);
@@ -155,7 +185,7 @@ export function Dashboard({
         if (current === sequence.current) setLoading(false);
       });
     return () => controller.abort();
-  }, [app, from, to, refresh, loadStats]);
+  }, [analyticsView, app, from, to, refresh, loadStats]);
   const applied = data?.basic.range ?? { ...filter, level: "basic" };
   return (
     <>
@@ -193,7 +223,9 @@ export function Dashboard({
             <svg viewBox="0 0 24 24" aria-hidden="true">
               <path d="M12 3 4 6v6c0 5 3.5 8 8 9 4.5-1 8-4 8-9V6Z" />
             </svg>
-            {demo ? "Public demo · sample data" : "Only you · Cloudflare Access"}
+            {demo
+              ? "Public demo · sample data"
+              : "Only you · Cloudflare Access"}
           </div>
         </div>
       </header>
@@ -218,7 +250,7 @@ export function Dashboard({
         )}
         <div className="toolbar">
           <h1>{view}</h1>
-          {view !== "Privacy" && (
+          {analyticsView && (
             <div className="controls">
               <RangePicker
                 value={filter}
@@ -254,7 +286,10 @@ export function Dashboard({
                   title="Refresh"
                   disabled={loading}
                   onClick={() => {
-                    setFilter((current) => ({ ...current, ...refreshedTimeframe(current) }));
+                    setFilter((current) => ({
+                      ...current,
+                      ...refreshedTimeframe(current),
+                    }));
                     setRefresh((current) => current + 1);
                   }}
                 >
@@ -267,12 +302,14 @@ export function Dashboard({
             </div>
           )}
         </div>
-        {view !== "Privacy" && (
+        {analyticsView && (
           <p className="scope">
             {error ? (
               <span className="error-message" role="alert">
                 {error}
-                {data ? " Showing stale results for the last successful scope." : ""}
+                {data
+                  ? " Showing stale results for the last successful scope."
+                  : ""}
               </span>
             ) : (
               <>
@@ -283,7 +320,13 @@ export function Dashboard({
             )}
           </p>
         )}
-        {view === "Privacy" ? (
+        {view === "Cloudflare" ? (
+          <CloudflarePage
+            load={loadCloudflare}
+            write={writeCloudflare}
+            demo={demo}
+          />
+        ) : view === "Privacy" ? (
           <Privacy />
         ) : data ? (
           <div className={loading ? "content is-loading" : "content"}>
@@ -297,8 +340,11 @@ export function Dashboard({
           !loading && <p className="notice">No data loaded.</p>
         )}
         <footer>
-          <span>No model contents, names, visitor IDs, or individual timelines.</span>
-          <span>Glimpse · {demo ? "public demo · synthetic data" : "private analytics"}</span>
+          <span>No model contents, visitor IDs, or individual timelines.</span>
+          <span>
+            Glimpse ·{" "}
+            {demo ? "public demo · synthetic data" : "private analytics"}
+          </span>
         </footer>
       </main>
     </>

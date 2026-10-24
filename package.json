@@ -23,6 +23,7 @@
     "types": "wrangler types",
     "check": "npm run typecheck && npm test && npm run check:deploy && npm run check:demo",
     "check:demo": "node scripts/check-demo-build.mjs",
+    "check:cloudflare": "node scripts/check-cloudflare-coverage.mjs",
     "check:deploy": "node scripts/check-deploy-build.mjs"
   },
   "dependencies": {
