@@ -75,8 +75,9 @@ at-least-once behavior around failures. No destination is configured by default.
 
 ## Rollout
 
-Monitoring remains disabled in Production and Previews. Under separate production
-migration/deployment authorization:
+Production configuration enables monitoring once the migration and secrets are
+in place. Previews remain disabled. Under production migration/deployment
+authorization:
 
 1. Run the coverage command with the intended read-only token.
 2. Apply migration `0004_cloudflare.sql` to the dedicated Preview database and
@@ -84,8 +85,9 @@ migration/deployment authorization:
 3. Apply the migration to Production before enabling collection.
 4. Set `CF_ACCOUNT_ID` and `CF_API_TOKEN` as Production Worker secrets. Do not
    copy credentials into ordinary vars, Preview or demo configuration.
-5. Set Production `CF_MONITOR_ENABLED` to `true` in deployment configuration;
-   keep Previews disabled. Previews do not run scheduled triggers.
+5. Deploy the checked-in Production `CF_MONITOR_ENABLED=true` configuration;
+   keep Previews disabled. Previews do not run scheduled triggers. Both secrets
+   must exist before the collector performs any database queries.
 6. Verify a real scheduled run, app mappings, coverage and billing totals against
    Cloudflare. Classify private apps and set budgets.
 7. Configure an alert webhook only when desired and explicitly authorized.

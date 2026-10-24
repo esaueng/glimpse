@@ -23,7 +23,7 @@ describe("preview isolation", () => {
     expect(preview.routes).toBeUndefined();
     expect(preview.services).toBeUndefined();
     expect(config.observability.enabled).toBe(false);
-    expect(config.vars.CF_MONITOR_ENABLED).toBe("false");
+    expect(config.vars.CF_MONITOR_ENABLED).toBe("true");
     expect(preview.vars.CF_MONITOR_ENABLED).toBe("false");
     expect(config.vars.CF_API_TOKEN).toBeUndefined();
     expect(preview.vars.CF_API_TOKEN).toBeUndefined();

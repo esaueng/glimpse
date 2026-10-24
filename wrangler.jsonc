@@ -22,7 +22,7 @@
     },
   ],
   "vars": {
-    "CF_MONITOR_ENABLED": "false",
+    "CF_MONITOR_ENABLED": "true",
     "ACCESS_ISSUER": "https://esau.cloudflareaccess.com",
     "ACCESS_AUD": "1207bdb7d60dadda07f486a5e3547c4c74ceb8688dc42a77002f64d29e2eebcb",
   },
