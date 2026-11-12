@@ -1,4 +1,3 @@
-import type { ReactNode } from "react";
 import { APPS, BUCKETS, type App, type Row } from "../src/contract";
 import { EXPANDED, PARTS, SIZES, TIMINGS } from "../src/expanded";
 import {
@@ -39,6 +38,7 @@ import {
   operationLabels,
 } from "./labels";
 import { ReportInspector } from "./ReportInspector";
+import { Panel, Tile } from "./ui";
 
 const appTone: Record<App, Tone> = {
   openzcad: "accent",
@@ -56,63 +56,6 @@ const notApplicable = (scope: string, owners: App[]) =>
 // Opt-in detail (operations, categories, sizes, diagnostics) exists for these apps.
 const EXPANDED_APPS: App[] = ["openzcad", "openfea"];
 
-function Tile({
-  label,
-  value,
-  children,
-  gap = false,
-}: {
-  label: string;
-  value: ReactNode;
-  children?: ReactNode;
-  gap?: boolean;
-}) {
-  return (
-    <div className={gap ? "tile tile-gap" : "tile"}>
-      <span className="tile-label">{label}</span>
-      <strong className="tile-value">{value}</strong>
-      {children && <span className="tile-note">{children}</span>}
-    </div>
-  );
-}
-function Panel({
-  title,
-  note,
-  children,
-  className = "",
-  level = 2,
-  na,
-}: {
-  title: string;
-  note?: ReactNode;
-  children?: ReactNode;
-  className?: string;
-  level?: 2 | 3;
-  /** Set when the app filter excludes the owning app: the panel collapses to one N/A row. */
-  na?: string;
-}) {
-  const Heading = level === 2 ? "h2" : "h3";
-  if (na)
-    return (
-      <section className={`panel panel-na ${className}`}>
-        <div className="panel-heading">
-          <Heading>{title}</Heading>
-          <span className="panel-meta">
-            <strong className="na">N/A</strong> · {na}
-          </span>
-        </div>
-      </section>
-    );
-  return (
-    <section className={`panel ${className}`}>
-      <div className="panel-heading">
-        <Heading>{title}</Heading>
-        {note && <span className="panel-meta">{note}</span>}
-      </div>
-      {children}
-    </section>
-  );
-}
 const OptIn = () => <span className="badge">Opted-in users</span>;
 
 export function Overview({ data, app }: { data: Loaded; app: string }) {

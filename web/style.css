@@ -9,7 +9,12 @@
   background: #0a0f18;
   color-scheme: dark;
   font-synthesis: none;
-  font-size: 14px;
+  /* 87.5% is 14px at the browser's default 16px and follows the user's
+     preferred size (WCAG 1.4.4). Font sizes are written as N text-px: exactly
+     N px at the default, scaled with the user's setting. The unit lives in a
+     custom property so the minifier keeps the division exact. */
+  font-size: 87.5%;
+  --text-px: calc(1rem / 14);
   line-height: 1.45;
   --mono: ui-monospace, "SF Mono", "Cascadia Mono", Menlo, monospace;
   --canvas: #0a0f18;
@@ -83,7 +88,7 @@ select {
 }
 input[type="date"] {
   font-family: var(--mono);
-  font-size: 12px;
+  font-size: calc(12 * var(--text-px));
 }
 a {
   color: var(--accent);
@@ -141,16 +146,16 @@ p {
   margin: 0;
 }
 h1 {
-  font-size: 28px;
+  font-size: 2rem;
   font-weight: 600;
   letter-spacing: -0.03em;
 }
 h2 {
-  font-size: 16px;
+  font-size: calc(16 * var(--text-px));
   font-weight: 600;
 }
 h3 {
-  font-size: 15px;
+  font-size: calc(15 * var(--text-px));
   font-weight: 600;
 }
 .numeric,
@@ -165,10 +170,10 @@ td.numeric,
   color: var(--muted);
 }
 .small {
-  font-size: 12px;
+  font-size: calc(12 * var(--text-px));
 }
 .big {
-  font-size: 16px;
+  font-size: calc(16 * var(--text-px));
   color: var(--text);
 }
 .strong {
@@ -199,7 +204,7 @@ td.numeric,
   color: var(--text);
   text-decoration: none;
   font-weight: 600;
-  font-size: 18px;
+  font-size: calc(18 * var(--text-px));
   letter-spacing: -0.02em;
 }
 .topbar nav {
@@ -234,7 +239,7 @@ td.numeric,
   padding: 7px 12px;
   border: 1px solid var(--line);
   border-radius: var(--control-radius);
-  font-size: 13px;
+  font-size: calc(13 * var(--text-px));
   color: #c3d0e3;
 }
 .access-short {
@@ -297,7 +302,7 @@ main {
   gap: 10px;
   margin-left: auto;
   font-family: var(--mono);
-  font-size: 12px;
+  font-size: calc(12 * var(--text-px));
   color: var(--muted);
 }
 .refresh button {
@@ -336,7 +341,7 @@ main {
   border-radius: var(--radius);
   background: #1f1a0e;
   color: #f2e3c0;
-  font-size: 13px;
+  font-size: calc(13 * var(--text-px));
 }
 .range-notice p {
   flex: 1 1 240px;
@@ -359,7 +364,7 @@ main {
 }
 .scope {
   margin-top: -10px;
-  font-size: 12px;
+  font-size: calc(12 * var(--text-px));
   color: var(--muted);
 }
 .error-message {
@@ -382,7 +387,7 @@ main {
 }
 .range-text {
   font-family: var(--mono);
-  font-size: 13px;
+  font-size: calc(13 * var(--text-px));
 }
 .chevron,
 .check,
@@ -408,7 +413,7 @@ main {
   border: 1px solid var(--control);
   border-radius: 6px;
   font-family: var(--mono);
-  font-size: 12px;
+  font-size: calc(12 * var(--text-px));
   font-weight: 400;
   color: var(--muted);
 }
@@ -489,7 +494,7 @@ main {
   display: flex;
   flex-direction: column;
   gap: 4px;
-  font-size: 12px;
+  font-size: calc(12 * var(--text-px));
   color: var(--muted);
 }
 .range-custom input {
@@ -497,7 +502,7 @@ main {
 }
 .range-hint {
   align-self: center;
-  font-size: 12px;
+  font-size: calc(12 * var(--text-px));
   color: var(--faint);
 }
 .range-hint.range-error {
@@ -529,7 +534,7 @@ main {
 }
 .demo-banner strong {
   color: #f6d48a;
-  font-size: 15px;
+  font-size: calc(15 * var(--text-px));
 }
 .demo-banner p {
   margin-top: 4px;
@@ -551,7 +556,7 @@ main {
   gap: 10px;
 }
 .section-title {
-  font-size: 18px;
+  font-size: calc(18 * var(--text-px));
   letter-spacing: -0.01em;
 }
 .section-heading {
@@ -567,7 +572,7 @@ main {
   padding: 2px 8px;
   border: 1px solid var(--control);
   border-radius: 4px;
-  font-size: 12px;
+  font-size: calc(12 * var(--text-px));
   font-weight: 400;
   color: var(--muted);
 }
@@ -589,7 +594,7 @@ main {
   gap: 6px 12px;
 }
 .panel-meta {
-  font-size: 12px;
+  font-size: calc(12 * var(--text-px));
   color: var(--muted);
 }
 .panel-na {
@@ -612,7 +617,7 @@ main {
   order: 1;
 }
 .panel-note {
-  font-size: 12px;
+  font-size: calc(12 * var(--text-px));
   color: var(--muted);
 }
 .panel-foot {
@@ -630,7 +635,7 @@ main {
 .empty,
 .empty-cell {
   color: var(--muted);
-  font-size: 13px;
+  font-size: calc(13 * var(--text-px));
 }
 .split {
   display: flex;
@@ -665,6 +670,8 @@ main {
 .tile {
   flex: 1 1 170px;
   min-width: 0;
+  /* Long words wrap instead of being clipped when text is enlarged. */
+  overflow-wrap: break-word;
   padding: 14px 18px 16px;
   display: flex;
   flex-direction: column;
@@ -679,22 +686,22 @@ main {
 .tile-gap .tile-value {
   color: #6d7f9c;
   font-family: inherit;
-  font-size: 18px;
+  font-size: calc(18 * var(--text-px));
   letter-spacing: 0;
   line-height: 1.6;
 }
 .tile-label {
-  font-size: 12px;
+  font-size: calc(12 * var(--text-px));
   color: var(--muted);
 }
 .tile-value {
-  font-size: 26px;
+  font-size: calc(26 * var(--text-px));
   line-height: 1.15;
   font-weight: 500;
   letter-spacing: -0.03em;
 }
 .tile-note {
-  font-size: 12px;
+  font-size: calc(12 * var(--text-px));
   color: var(--muted);
 }
 
@@ -711,7 +718,7 @@ main {
   align-items: center;
   padding: 10px 0;
   border-bottom: 1px solid var(--line-soft);
-  font-size: 13px;
+  font-size: calc(13 * var(--text-px));
 }
 .growth li:first-child {
   padding-top: 0;
@@ -766,7 +773,7 @@ main {
   gap: 8px;
 }
 .hero-value {
-  font-size: 52px;
+  font-size: calc(52 * var(--text-px));
   line-height: 1;
   font-weight: 500;
   letter-spacing: -0.05em;
@@ -780,12 +787,12 @@ main {
   border-top: 1px solid var(--line-soft);
 }
 .hero-stats dt {
-  font-size: 12px;
+  font-size: calc(12 * var(--text-px));
   color: var(--muted);
 }
 .hero-stats dd {
   margin: 0;
-  font-size: 19px;
+  font-size: calc(19 * var(--text-px));
 }
 .hero-chart {
   flex: 999 1 520px;
@@ -850,7 +857,7 @@ main {
   position: absolute;
   left: 0;
   font-family: var(--mono);
-  font-size: 10px;
+  font-size: calc(10 * var(--text-px));
   color: var(--faint);
   pointer-events: none;
 }
@@ -888,7 +895,7 @@ main {
   background: var(--fea);
   color: var(--canvas);
   font-family: var(--mono);
-  font-size: 11px;
+  font-size: calc(11 * var(--text-px));
   line-height: 1.4;
   white-space: nowrap;
   text-align: center;
@@ -897,7 +904,7 @@ main {
   --want: calc(-8px - var(--w));
 }
 .chart-single {
-  font-size: 12px;
+  font-size: calc(12 * var(--text-px));
   color: var(--muted);
 }
 .chart-empty {
@@ -906,13 +913,13 @@ main {
   display: grid;
   place-items: center;
   color: var(--muted);
-  font-size: 13px;
+  font-size: calc(13 * var(--text-px));
 }
 .x-labels {
   display: flex;
   justify-content: space-between;
   font-family: var(--mono);
-  font-size: 11px;
+  font-size: calc(11 * var(--text-px));
   color: var(--faint);
 }
 .chart-title {
@@ -920,7 +927,7 @@ main {
   justify-content: space-between;
   align-items: baseline;
   gap: 12px;
-  font-size: 13px;
+  font-size: calc(13 * var(--text-px));
   color: var(--muted);
 }
 .chart-title .numeric {
@@ -931,7 +938,7 @@ main {
 .more-panel > summary {
   cursor: pointer;
   padding: 4px 0;
-  font-size: 12px;
+  font-size: calc(12 * var(--text-px));
   color: var(--muted);
 }
 .data-disclosure[open] summary {
@@ -942,7 +949,7 @@ main {
   padding-bottom: 16px;
 }
 .more-panel > summary {
-  font-size: 14px;
+  font-size: 1rem;
   color: var(--text);
 }
 .stack {
@@ -982,7 +989,7 @@ main {
   display: flex;
   flex-wrap: wrap;
   gap: 4px 14px;
-  font-size: 11px;
+  font-size: calc(11 * var(--text-px));
   color: var(--muted);
 }
 .legend li {
@@ -1027,13 +1034,18 @@ main {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  font-size: 13px;
+  font-size: calc(13 * var(--text-px));
 }
 .rank-bars li {
   display: grid;
-  grid-template-columns: minmax(110px, 40%) minmax(0, 1fr) 56px;
+  /* 4rem is 56px at the default size and grows with enlarged text. */
+  grid-template-columns: minmax(110px, 40%) minmax(0, 1fr) 4rem;
   gap: 12px;
   align-items: center;
+}
+.rank-label {
+  overflow-wrap: break-word;
+  min-width: 0;
 }
 .rank-bars .numeric {
   text-align: right;
@@ -1060,7 +1072,7 @@ main {
   border-radius: 6px 6px 2px 2px;
 }
 .column-label {
-  font-size: 12px;
+  font-size: calc(12 * var(--text-px));
   color: var(--muted);
 }
 
@@ -1085,16 +1097,17 @@ main {
 }
 .app-row {
   display: flex;
+  flex-wrap: wrap;
   justify-content: space-between;
   align-items: baseline;
   gap: 12px;
-  font-size: 12px;
+  font-size: calc(12 * var(--text-px));
 }
 .app-name {
   display: inline-flex;
   align-items: center;
   gap: 10px;
-  font-size: 14px;
+  font-size: 1rem;
   font-weight: 600;
 }
 .app-name .swatch {
@@ -1106,7 +1119,7 @@ main {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
-  font-size: 12px;
+  font-size: calc(12 * var(--text-px));
   color: var(--muted);
 }
 .category-grid {
@@ -1134,7 +1147,7 @@ main {
   display: flex;
   flex-direction: column;
   gap: 10px;
-  font-size: 13px;
+  font-size: calc(13 * var(--text-px));
 }
 .slow-list li {
   display: grid;
@@ -1169,7 +1182,7 @@ main {
     inset -18px 0 12px -12px rgb(0 0 0 / 85%);
 }
 .scroll-hint {
-  font-size: 12px;
+  font-size: calc(12 * var(--text-px));
   color: var(--muted);
 }
 .table-scroll.tall {
@@ -1184,12 +1197,12 @@ main {
 table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 13px;
+  font-size: calc(13 * var(--text-px));
 }
 th {
   padding: 8px 12px 8px 0;
   text-align: left;
-  font-size: 12px;
+  font-size: calc(12 * var(--text-px));
   font-weight: 500;
   color: var(--muted);
   border-bottom: 1px solid var(--line);
@@ -1212,7 +1225,7 @@ td:last-child {
 }
 code {
   font-family: var(--mono);
-  font-size: 12px;
+  font-size: calc(12 * var(--text-px));
   color: #c3d0e3;
 }
 
@@ -1222,7 +1235,7 @@ code {
 }
 .report-panel .panel-heading p {
   margin-top: 2px;
-  font-size: 13px;
+  font-size: calc(13 * var(--text-px));
   color: var(--muted);
 }
 .report-actions {
@@ -1237,7 +1250,7 @@ code {
 .report-paste textarea {
   display: block;
   font:
-    12px/1.5 var(--mono);
+    calc(12 * var(--text-px))/1.5 var(--mono);
   min-height: 120px;
   resize: vertical;
   width: 100%;
@@ -1249,7 +1262,7 @@ code {
   padding: 10px;
 }
 .report-paste label {
-  font-size: 13px;
+  font-size: calc(13 * var(--text-px));
   color: var(--muted);
 }
 .report-paste > div {
@@ -1262,7 +1275,7 @@ code {
   flex-wrap: wrap;
   align-items: center;
   gap: 8px 16px;
-  font-size: 13px;
+  font-size: calc(13 * var(--text-px));
 }
 .report-status span {
   color: var(--muted);
@@ -1276,7 +1289,7 @@ code {
   max-width: 860px;
 }
 .privacy-content h2 {
-  font-size: 20px;
+  font-size: calc(20 * var(--text-px));
 }
 .privacy-content h3 {
   margin-top: 8px;
@@ -1292,7 +1305,7 @@ footer {
   justify-content: space-between;
   gap: 4px 16px;
   padding-top: 8px;
-  font-size: 12px;
+  font-size: calc(12 * var(--text-px));
   color: var(--faint);
 }
 
@@ -1313,17 +1326,17 @@ footer {
   .topbar nav button {
     min-height: 40px;
     padding: 6px 4px;
-    font-size: 13px;
+    font-size: calc(13 * var(--text-px));
   }
   .access-label {
-    font-size: 12px;
+    font-size: calc(12 * var(--text-px));
   }
   main {
     padding: 18px 16px 40px;
     gap: 20px;
   }
   h1 {
-    font-size: 24px;
+    font-size: calc(24 * var(--text-px));
   }
   .controls {
     width: 100%;
@@ -1355,7 +1368,7 @@ footer {
   .growth-range {
     grid-column: 2 / -1;
     grid-row: 2;
-    font-size: 12px;
+    font-size: calc(12 * var(--text-px));
     color: var(--muted);
   }
   .scope {
@@ -1373,10 +1386,10 @@ footer {
     border-bottom: 1px solid var(--line-soft);
   }
   .hero-value {
-    font-size: 40px;
+    font-size: calc(40 * var(--text-px));
   }
   .tile-value {
-    font-size: 22px;
+    font-size: calc(22 * var(--text-px));
   }
   .slow-list li {
     grid-template-columns: minmax(0, 1fr) auto;

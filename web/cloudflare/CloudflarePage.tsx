@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useLoader, useUrlState } from "../hooks";
+import { Tile } from "../ui";
 import {
   allocate,
   alerts,
@@ -28,24 +30,6 @@ import "./cloudflare.css";
 
 export type { MonitorLoader, SettingsWriter } from "./types";
 
-function Tile({
-  label,
-  value,
-  note,
-}: {
-  label: string;
-  value: string;
-  note: string;
-}) {
-  return (
-    <div className="tile">
-      <span className="tile-label">{label}</span>
-      <strong className="tile-value">{value}</strong>
-      <span className="tile-note">{note}</span>
-    </div>
-  );
-}
-
 function RefreshIcon() {
   return (
     <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -64,11 +48,7 @@ export function CloudflarePage({
   write?: SettingsWriter;
   demo?: boolean;
 }) {
-  const [data, setData] = useState<CloudflareData | null>(null),
-    [loading, setLoading] = useState(true),
-    [error, setError] = useState(""),
-    [refresh, setRefresh] = useState(0),
-    [requested, setFilters] = useState(readFilters),
+  const [requested, setFilters] = useUrlState(readFilters),
     [editing, setEditing] = useState<{
       app: App;
       invoker: HTMLElement | null;
@@ -76,36 +56,19 @@ export function CloudflarePage({
     [accountBudget, setAccountBudget] = useState(""),
     [saving, setSaving] = useState(false),
     [sort, setSort] = useState("cost");
-  const sequence = useRef(0),
-    addButton = useRef<HTMLButtonElement>(null);
-  useEffect(() => {
-    const restore = () => setFilters(readFilters());
-    window.addEventListener("popstate", restore);
-    return () => window.removeEventListener("popstate", restore);
-  }, []);
-  useEffect(() => {
-    const id = ++sequence.current,
-      controller = new AbortController();
-    setLoading(true);
-    setError("");
-    (load ? load(controller.signal) : Promise.resolve(emptyData()))
-      .then((next) => {
-        if (id === sequence.current) {
-          setData(next);
+  const { data, setData, loading, error, setError, refresh } =
+    useLoader<CloudflareData>(
+      (signal) => (load ? load(signal) : Promise.resolve(emptyData())),
+      [load],
+      {
+        errorMessage: () => "Cloudflare data could not be loaded. Try Refresh.",
+        onLoad: (next) =>
           setAccountBudget(
             next.budget === null ? "" : String(next.budget / 1e6),
-          );
-        }
-      })
-      .catch(() => {
-        if (!controller.signal.aborted && id === sequence.current)
-          setError("Cloudflare data could not be loaded. Try Refresh.");
-      })
-      .finally(() => {
-        if (id === sequence.current) setLoading(false);
-      });
-    return () => controller.abort();
-  }, [load, refresh]);
+          ),
+      },
+    );
+  const addButton = useRef<HTMLButtonElement>(null);
 
   const now = new Date(),
     currentPeriod = data?.periods.find(
@@ -136,7 +99,7 @@ export function CloudflarePage({
     }
     if (!write) throw new Error("Settings unavailable");
     await write(value);
-    setRefresh((n) => n + 1);
+    refresh();
   };
 
   const selectedPeriod =
@@ -279,7 +242,7 @@ export function CloudflarePage({
             title="Refresh"
             aria-disabled={loading || undefined}
             onClick={() => {
-              if (!loading) setRefresh((n) => n + 1);
+              if (!loading) refresh();
             }}
           >
             <RefreshIcon />
@@ -336,15 +299,14 @@ export function CloudflarePage({
                   ? formatMoney(total, currency)
                   : "—"
               }
-              note={
-                previousCharges?.length && !scoped
-                  ? `Previous full period ${formatMoney(
-                      previousCharges.reduce((n, c) => n + c.cost, 0),
-                      currency,
-                    )}`
-                  : "Selected dates · excluding subscriptions and tax"
-              }
-            />
+            >
+              {previousCharges?.length && !scoped
+                ? `Previous full period ${formatMoney(
+                    previousCharges.reduce((n, c) => n + c.cost, 0),
+                    currency,
+                  )}`
+                : "Selected dates · excluding subscriptions and tax"}
+            </Tile>
             <Tile
               label="Fixed subscriptions"
               value={
@@ -354,15 +316,17 @@ export function CloudflarePage({
                   ? formatMoney(monthly, currency)
                   : "—"
               }
-              note="Account-wide monthly equivalent · current plans"
-            />
+            >
+              Account-wide monthly equivalent · current plans
+            </Tile>
             <Tile
               label="Projected metered cost"
               value={
                 projection === null ? "—" : formatMoney(projection, currency)
               }
-              note="Period-end estimate · needs 3 reported days"
-            />
+            >
+              Period-end estimate · needs 3 reported days
+            </Tile>
             <Tile
               label="Account budget remaining"
               value={
@@ -379,8 +343,9 @@ export function CloudflarePage({
                     )
                   : "—"
               }
-              note="USD metered-usage budget · current billing period"
-            />
+            >
+              USD metered-usage budget · current billing period
+            </Tile>
           </div>
           {warnings.length > 0 && (
             <section

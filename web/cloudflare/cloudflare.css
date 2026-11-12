@@ -39,7 +39,7 @@
   flex-direction: column;
   gap: 6px;
   color: var(--muted);
-  font-size: 12px;
+  font-size: calc(12 * var(--text-px));
 }
 .cf-filters label {
   flex: 1 1 150px;
@@ -49,7 +49,7 @@
 .cf-filters input {
   width: 100%;
   color: var(--text);
-  font-size: 14px;
+  font-size: 1rem;
 }
 .cf-filters select[data-active] {
   border-color: var(--accent);
@@ -59,7 +59,7 @@
   flex-wrap: wrap;
   align-items: center;
   gap: 8px 12px;
-  font-size: 12px;
+  font-size: calc(12 * var(--text-px));
   color: var(--muted);
 }
 .cf-active ul {
@@ -88,12 +88,12 @@
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  font-size: 12px;
+  font-size: calc(12 * var(--text-px));
   color: var(--muted);
 }
 .cf-inline-label select {
   color: var(--text);
-  font-size: 14px;
+  font-size: 1rem;
 }
 
 /* Tables */
@@ -137,7 +137,7 @@
   display: flex;
   justify-content: space-between;
   gap: 16px;
-  font-size: 12px;
+  font-size: calc(12 * var(--text-px));
   margin-bottom: 4px;
 }
 .cf-metrics li > span:first-child {
@@ -156,7 +156,7 @@
   grid-template-columns: 52px minmax(0, 1fr) 88px;
   gap: 12px;
   align-items: center;
-  font-size: 12px;
+  font-size: calc(12 * var(--text-px));
 }
 .cf-spend-row > .numeric {
   text-align: right;
@@ -214,7 +214,7 @@
 .cf-editor select {
   width: 100%;
   color: var(--text);
-  font-size: 14px;
+  font-size: 1rem;
 }
 .cf-actions {
   display: flex;
@@ -235,7 +235,7 @@
 }
 .cf-budget input {
   color: var(--text);
-  font-size: 14px;
+  font-size: 1rem;
 }
 .cf-alerts ul {
   margin: 0;
@@ -294,7 +294,7 @@
   .cf-page .cf-cell-label {
     display: block;
     color: var(--muted);
-    font-size: 12px;
+    font-size: calc(12 * var(--text-px));
     text-align: left;
   }
   .cf-page .cf-cell-value {
@@ -306,7 +306,7 @@
   .cf-page .cf-table td.cf-title {
     display: block;
     padding-bottom: 6px;
-    font-size: 14px;
+    font-size: 1rem;
     font-weight: 600;
     text-align: left;
   }
