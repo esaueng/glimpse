@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { loadErrorMessage } from "../api";
 import { useLoader, useUrlState } from "../hooks";
 import { Tile } from "../ui";
 import {
@@ -61,7 +62,8 @@ export function CloudflarePage({
       (signal) => (load ? load(signal) : Promise.resolve(emptyData())),
       [load],
       {
-        errorMessage: () => "Cloudflare data could not be loaded. Try Refresh.",
+        errorMessage: (e) =>
+          loadErrorMessage(e, "Cloudflare data could not be loaded. Try Refresh."),
         onLoad: (next) =>
           setAccountBudget(
             next.budget === null ? "" : String(next.budget / 1e6),
