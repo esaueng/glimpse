@@ -47,16 +47,25 @@ moves to the table above. Owners are unassigned until someone takes the item.
 | 7 | Hourly census delivery | Read OpenZCAD's `daily_census` row for the current day twice, a few hours apart, on several days | The stored `generation` advances between reads within a day, and each UTC day has a row while any account permission exists | unassigned | Yes: production D1 read |
 | 8 | Dashboard and demo deployment after #21, #22 and #26 | Confirm the private Worker version built from current main; run `npm run deploy:demo` under authorization; repeat the demo checks in [SETUP.md](SETUP.md#public-synthetic-demo) | Private dashboard shows five pages including Cloudflare; `/demo` serves the current build with `connect-src 'none'`; live paths still require Access | unassigned | Yes: production deployment |
 
-### In progress on this branch
+### Merged on this branch, not yet deployed or recorded
 
-Another change on this branch is adding the following. Treat them as planned
-until merged, deployed and recorded:
+These are merged code changes. Treat them as unverified until deployed and
+recorded in the ledger:
 
-- A data-free "Analytics retention" heartbeat listed in the Cloudflare page's
-  collection-coverage table, so item 3 can be observed without reading rows.
-- Named cron constants with a test that ties them to `wrangler.jsonc`.
-- A 503 response when the Access key endpoint is unavailable.
-- A small clock tolerance for Access JWT time claims.
+- A data-free "Analytics retention" heartbeat in the Cloudflare collection
+  coverage table, so item 3 can be observed without reading rows. It is written
+  to `cf_coverage`, so it needs migration `0004`; if the table is missing, the
+  heartbeat is skipped and retention still runs.
+- Named cron constants in `src/schedule.ts`, with a test that ties them to
+  `wrangler.jsonc`.
+- A 503 (with `Retry-After`) when the Access signing-key endpoint is
+  unavailable, instead of a misleading 401.
+- A 60-second clock tolerance for Access JWT time claims.
+- The OpenZCAD `snapshot(...)` RPC returns `{ accepted }`, so a rejected
+  (out-of-order) generation is visible to the caller.
+- Collector hardening: alerts and retention run even when the identity check
+  fails; unsupported datasets no longer stall backfill or send daily alerts;
+  reads are capped instead of failing above 100,000 rows.
 
 ## Hygiene backlog
 

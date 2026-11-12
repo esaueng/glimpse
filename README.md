@@ -83,7 +83,8 @@ flowchart LR
 `OpenZCADIngest`, `OpenFEAIngest`, and `OpenLattice3DIngest` fix the caller's app
 identity. `record({ level, event, bucket })` validates an allowlisted metric and
 increments its UTC receipt-day counter. OpenZCAD also has a `snapshot(...)`
-entrypoint for aggregate cloud statistics. There is no public HTTP ingestion
+entrypoint for aggregate cloud statistics; it returns `{ accepted }` so the caller
+can see a rejected out-of-order generation. There is no public HTTP ingestion
 endpoint. Authenticated dashboard reads use `/api/stats`.
 
 Daily counters and the latest snapshot per app/day are stored separately.

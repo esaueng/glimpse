@@ -31,7 +31,8 @@ Cloud snapshots refresh on OpenZCAD’s existing hourly cron, plus on consent ch
 Snapshots use monotonically increasing app-wide generations to discard duplicate
 or out-of-order deliveries. Generations identify aggregate revisions, not users.
 After restoring an app database, reconcile its generation above the latest
-Glimpse generation before resuming; a restored lower counter is safely rejected.
+Glimpse generation before resuming; a restored lower counter is safely rejected, and `snapshot(...)` returns
+`{ accepted: false }` so the app can detect it.
 
 ## Consent and reports
 

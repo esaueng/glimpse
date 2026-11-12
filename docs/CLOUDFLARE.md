@@ -61,10 +61,26 @@ today and yesterday each hour, plus one older day per run within upstream
 retention. Store up to 400 UTC days (about 13 months); upstream coverage can be shorter.
 
 A D1 lease prevents overlap. Sources fail independently and retain prior results.
-Coverage displays failures and last-success times. HTTP throttling/server errors
-retry with bounded backoff. Truncated datasets are withheld rather than shown as
-complete. Current billing cycles are reconciled; historical billing accumulates
-from collection onward.
+Coverage displays failures and last-success times. HTTP throttling/server errors,
+network errors, timeouts and rate-limited GraphQL responses retry with bounded
+backoff. Only schema or entitlement errors mark a dataset **unsupported**; an
+unsupported dataset counts as complete for discovery and backfill (tracked per
+dataset) and never raises an alert. Truncated datasets are withheld rather than
+shown as complete. Current billing cycles are reconciled; historical billing
+accumulates from collection onward.
+
+If the account identity check fails (for example, an expired or revoked token),
+collection is skipped but retention and alert delivery still run, so the failure
+reaches the webhook. `/api/cloudflare` accepts an optional `?from=YYYY-MM-DD` to
+limit usage and charges; reads are capped, and when older rows are left out a
+"Usage history" or "Billing history" coverage row says so. Alert evaluation reads
+only the last 40 days.
+
+The daily `31 3 * * *` analytics retention job writes a data-free "Analytics
+retention" row (status and time only) to the coverage table, so retention can be
+observed without reading analytics rows; the 48-hour staleness alert applies to
+it. Cron strings live in `src/schedule.ts`, and a test ties them to
+`wrangler.jsonc`.
 
 Account/app budgets monitor USD metered usage per billing period. In-page alerts
 cover 80%/100% thresholds, projected overspend, stale/failed sources, and daily
