@@ -1,0 +1,11 @@
+{
+  // Browser dashboard: DOM and Vite client types, no Workers or Node types. Shared
+  // modules it imports from src/ (contract, expanded, dates, cloudflare/model) must
+  // compile here as well as under tsconfig.worker.json.
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "types": ["vite/client"]
+  },
+  "include": ["web"]
+}

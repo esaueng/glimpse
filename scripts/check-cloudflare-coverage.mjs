@@ -34,6 +34,10 @@ try {
   const identity = await client.accountRequest("");
   if (identity.result?.name !== "Esau")
     throw new Error("This check only supports the Esau account.");
+  /**
+   * @param {string} source
+   * @param {() => Promise<object>} run
+   */
   async function check(source, run) {
     try {
       console.log(JSON.stringify({ source, status: "ok", ...(await run()) }));
@@ -43,7 +47,7 @@ try {
         JSON.stringify({
           source,
           status: "unavailable",
-          httpStatus: e.status ?? null,
+          httpStatus: /** @type {{ status?: number }} */ (e).status ?? null,
         }),
       );
     }

@@ -12,6 +12,7 @@ const USES_PATTERN = /^\s*-?\s*uses:\s*([^\s#]+?)\s*(?:#\s*(.+))?$/;
 const PINNED_REF_PATTERN = /^[\w.-]+\/[\w./-]+@[0-9a-f]{40}$/;
 const VERSION_COMMENT_PATTERN = /^v\d+\.\d+\.\d+\b/;
 
+/** @type {string[]} */
 const failures = [];
 let checked = 0;
 

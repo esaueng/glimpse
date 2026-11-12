@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { build } from "esbuild";
 import { Miniflare, convertV4MiniflareOptions } from "miniflare";
 import { generateKeyPair, exportJWK, SignJWT } from "jose";
-import { readFileSync } from "node:fs";
+import { applyMigration, applyMigrations, MIGRATION_FILES } from "./d1-migrations";
 import { census, parseReport } from "../src/expanded";
 import { dateRange, metric } from "../src/contract";
 let mf: Miniflare;
@@ -123,25 +123,13 @@ beforeAll(async () => {
     }),
   );
   const db = await mf.getD1Database("DB", "collector");
-  await db.exec(
-    readFileSync("migrations/0001_aggregates.sql", "utf8").replace(/\n/g, " "),
-  );
+  await applyMigration(db, "0001_aggregates.sql");
   // Upgrade a populated v1 database, as production will do.
   await db
     .prepare("INSERT INTO daily_counts VALUES(?,?,?,?,?,?)")
     .bind(today, "openzcad", "basic", "api_request", "none", 7)
     .run();
-  await db.exec(
-    readFileSync("migrations/0002_openlattice3d.sql", "utf8")
-      .replace(/--[^\n]*/g, "")
-      .replace(/\n/g, " "),
-  );
-  await db.exec(
-    readFileSync("migrations/0003_census.sql", "utf8")
-      .split("\n")
-      .filter((line) => !line.startsWith("--"))
-      .join(" "),
-  );
+  await applyMigrations(db, MIGRATION_FILES.slice(1));
 }, 30000);
 afterAll(async () => {
   await mf?.dispose();
@@ -459,12 +447,12 @@ describe("real Worker RPC, D1 and Access JWT", () => {
       ).toBe(401);
     }
     const db = await mf.getD1Database("DB", "preview-collector");
-    for (const migration of ["0001_aggregates.sql", "0002_openlattice3d.sql"])
-      await db.exec(
-        readFileSync(`migrations/${migration}`, "utf8")
-          .replace(/--[^\n]*/g, "")
-          .replace(/\n/g, " "),
-      );
+    // Preview has the analytics migrations; the stats guard needs all three.
+    await applyMigrations(db, [
+      "0001_aggregates.sql",
+      "0002_openlattice3d.sql",
+      "0003_census.sql",
+    ]);
     await db
       .prepare("INSERT INTO daily_counts VALUES(?,?,?,?,?,?)")
       .bind(today, "openlattice3d", "basic", "api_request", "none", 13)
