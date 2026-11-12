@@ -1,0 +1,19 @@
+{
+  // Node-side code: vitest suites (including future test/**/*.tsx component tests),
+  // Vite configs and helper scripts. Tests import Worker and browser modules and drive
+  // Miniflare, so this config deliberately combines DOM, Node and Workers types.
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "types": ["vite/client", "node"],
+    "allowJs": true,
+    "checkJs": true
+  },
+  "include": [
+    "test",
+    "scripts/**/*.mjs",
+    "vite.config.ts",
+    "vite.demo.config.ts",
+    "worker-configuration.d.ts"
+  ]
+}

@@ -4,6 +4,7 @@ import { access } from "./auth";
 import { dateRange, metric, type App } from "./contract";
 import { cloudflareApi } from "./cloudflare/api";
 import { logFailure } from "./errors";
+import { migrationPending, missingMigrations } from "./migrations";
 import { runScheduled } from "./schedule";
 export async function record(
   env: Pick<Env, "DB">,
@@ -101,6 +102,8 @@ export default {
       url.pathname.startsWith("/api/cloudflare/")
     ) {
       try {
+        const missing = await missingMigrations(env.DB, "cloudflare");
+        if (missing.length) return protect(migrationPending(missing));
         return protect(await cloudflareApi(request, env));
       } catch (error) {
         logFailure("Cloudflare monitor request failed", error);
@@ -135,6 +138,8 @@ export default {
               { status: 400 },
             ),
           );
+        const missing = await missingMigrations(env.DB, "stats");
+        if (missing.length) return protect(migrationPending(missing));
         const rows = await env.DB.prepare(
           `SELECT day,app,level,event,bucket,count FROM daily_counts
           WHERE day>=? AND day<=? AND day>=date('now','-89 days') AND level=? AND (?='all' OR app=?)

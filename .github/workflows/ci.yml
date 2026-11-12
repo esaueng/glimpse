@@ -28,6 +28,8 @@ jobs:
       - name: Check workflow action pins
         run: node scripts/check-workflow-pins.mjs
       - run: npm ci
+      # Per-runtime typechecks (worker, web, node), worker-configuration.d.ts freshness,
+      # tests (including the pending-migration guard), deploy and demo build checks.
       - run: npm run check
   # Kept out of the required `verify` job: a newly published advisory for an
   # existing dependency should not turn every unrelated PR red. Dependency

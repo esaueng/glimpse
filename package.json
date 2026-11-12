@@ -18,13 +18,14 @@
     "build:demo": "vite build --config vite.demo.config.ts",
     "dev:demo": "wrangler dev --config wrangler.demo.jsonc --ip 127.0.0.1 --port 8788",
     "deploy:demo": "wrangler deploy --config wrangler.demo.jsonc",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc -p tsconfig.worker.json && tsc -p tsconfig.web.json && tsc -p tsconfig.node.json",
     "test": "vitest run",
-    "types": "wrangler types",
-    "check": "npm run typecheck && npm test && npm run check:deploy && npm run check:demo",
+    "types": "node scripts/check-worker-types.mjs --write",
+    "check": "npm run typecheck && npm run check:types && npm test && npm run check:deploy && npm run check:demo",
     "check:demo": "node scripts/check-demo-build.mjs",
     "check:cloudflare": "node scripts/check-cloudflare-coverage.mjs",
-    "check:deploy": "node scripts/check-deploy-build.mjs"
+    "check:deploy": "node scripts/check-deploy-build.mjs",
+    "check:types": "node scripts/check-worker-types.mjs"
   },
   "dependencies": {
     "jose": "^6.2.13",
