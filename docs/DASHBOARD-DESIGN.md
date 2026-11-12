@@ -60,10 +60,12 @@ Pages:
 - Privacy: unchanged collection boundaries and consent text.
 
 Palette: canvas #0a0f18, surface #111a28, sunken #0d1420, line #22304a, soft
-line #1c2840, control #2c3d5c, text #eef3fb, muted #9db0cc, faint #8396b3,
-accent and OpenZCAD #a9c9fa, OpenFEA #e8eef7, OpenLattice3D and second tone
-#6f95cf, third tone #3e5a85, warning #f6c177, error #ff8a9c (text #ffa3b1).
-Apps are told apart by lightness as well as hue. 28px page titles, 16–18px
+line #1c2840, control #53688f, text #eef3fb, muted #9db0cc, faint #8396b3,
+accent and OpenZCAD #a9c9fa, OpenFEA #e8eef7, OpenLattice3D #6f95cf, second tone
+#7aa6c2, third tone #5577aa, warning #f6c177, error #ff8a9c (text #ffa3b1).
+Control borders and every data tone reach at least 3:1 against the surface
+(WCAG 1.4.11). Apps are told apart by lightness as well as hue; stacked bars
+also carry visible values and legends, so no reading depends on color alone. 28px page titles, 16–18px
 section and panel titles, 26px tabular monospace strip values, 20px page gaps. 12px panel radii,
 6px control radii (squared buttons), 9px navigation group.
 

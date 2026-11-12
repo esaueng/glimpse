@@ -304,6 +304,12 @@ export function CloudflarePage({
             Once configured, the scheduled collector discovers apps and stores
             billing and usage here. Opening this page reads stored results.
           </p>
+          {data.coverage.length > 0 && (
+            <>
+              <h3>Scheduled jobs</h3>
+              <CoverageTable coverage={data.coverage} />
+            </>
+          )}
         </section>
       )}
       {data?.configured && (

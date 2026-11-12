@@ -79,7 +79,8 @@ only the last 40 days.
 The daily `31 3 * * *` analytics retention job writes a data-free "Analytics
 retention" row (status and time only) to the coverage table, so retention can be
 observed without reading analytics rows; the 48-hour staleness alert applies to
-it. Cron strings live in `src/schedule.ts`, and a test ties them to
+it. The Cloudflare page shows this row under "Scheduled jobs" even before the
+monitor is connected (it still needs migration `0004`). Cron strings live in `src/schedule.ts`, and a test ties them to
 `wrangler.jsonc`.
 
 Account/app budgets monitor USD metered usage per billing period. In-page alerts
