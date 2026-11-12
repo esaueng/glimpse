@@ -1,0 +1,341 @@
+/*
+ * Cloudflare cost and usage page. Loaded with the page module, which can be
+ * bundled before style.css, so rules are scoped under .cf-page with enough
+ * specificity to win over the global element rules they refine.
+ */
+
+/* Heading row: scope line and the toolbar-style Refresh */
+.cf-heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 12px;
+}
+.cf-page .scope {
+  margin: 0;
+}
+.cf-page button[aria-disabled="true"],
+.cf-page select[aria-disabled="true"] {
+  opacity: 0.55;
+  cursor: wait;
+}
+
+/* Filters */
+.cf-filter-area {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.cf-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.cf-filters label,
+.cf-editor label,
+.cf-budget label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.cf-filters label {
+  flex: 1 1 150px;
+  min-width: 0;
+}
+.cf-filters select,
+.cf-filters input {
+  width: 100%;
+  color: var(--text);
+  font-size: 14px;
+}
+.cf-filters select[data-active] {
+  border-color: var(--accent);
+}
+.cf-active {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.cf-active ul {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.cf-active li {
+  padding: 2px 8px;
+  border: 1px solid var(--accent);
+  border-radius: 4px;
+  color: var(--accent);
+}
+
+/* Panel heading actions */
+.cf-panel-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+}
+.cf-inline-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.cf-inline-label select {
+  color: var(--text);
+  font-size: 14px;
+}
+
+/* Tables */
+.cf-page .cf-table td {
+  vertical-align: top;
+}
+.cf-page .cf-table th.numeric,
+.cf-page .cf-table td.numeric {
+  text-align: right;
+  padding-left: 12px;
+  padding-right: 24px;
+}
+.cf-page .cf-table th.numeric:last-child,
+.cf-page .cf-table td.numeric:last-child {
+  padding-right: 0;
+}
+/* Headers keep the sans label style; only values use tabular monospace. */
+.cf-page .cf-table th.numeric {
+  font-family: inherit;
+  white-space: nowrap;
+}
+.cf-page .cf-cell-label {
+  display: none;
+}
+.cf-page .cf-nowrap,
+.cf-page .cf-table td.numeric .cf-cell-value,
+.cf-page .cf-buttons button {
+  white-space: nowrap;
+}
+.cf-page .cf-buttons .cf-cell-value {
+  display: flex;
+  gap: 6px;
+}
+.cf-metrics {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  min-width: 230px;
+}
+.cf-metrics li {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  font-size: 12px;
+  margin-bottom: 4px;
+}
+.cf-metrics li > span:first-child {
+  color: var(--muted);
+}
+
+/* Daily stacked bars */
+.cf-spend {
+  display: grid;
+  gap: 5px;
+  max-height: 380px;
+  overflow-y: auto;
+}
+.cf-spend-row {
+  display: grid;
+  grid-template-columns: 52px minmax(0, 1fr) 88px;
+  gap: 12px;
+  align-items: center;
+  font-size: 12px;
+}
+.cf-spend-row > .numeric {
+  text-align: right;
+}
+.cf-spend-track {
+  display: flex;
+  min-height: 12px;
+  background: var(--sunken);
+}
+.cf-spend-track i {
+  display: block;
+  min-height: 12px;
+}
+.cf-series-0 {
+  background: var(--accent);
+}
+.cf-series-1 {
+  background: var(--lattice);
+}
+.cf-series-2 {
+  background: var(--fea);
+}
+.cf-series-3 {
+  background: var(--tone-3);
+}
+.cf-series-4 {
+  background: var(--warn);
+}
+.cf-series-5 {
+  background: color-mix(in srgb, var(--warn) 55%, var(--surface));
+}
+.cf-series-6 {
+  background: color-mix(in srgb, var(--accent) 45%, var(--surface));
+}
+
+/* App editor dialog */
+.cf-dialog {
+  width: min(480px, calc(100vw - 32px));
+  max-height: calc(100dvh - 32px);
+  padding: 20px;
+  border: 1px solid var(--control);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: 0 16px 40px rgb(0 0 0 / 45%);
+}
+.cf-dialog::backdrop {
+  background: rgb(0 0 0 / 60%);
+}
+.cf-editor {
+  display: grid;
+  gap: 14px;
+}
+.cf-editor input,
+.cf-editor select {
+  width: 100%;
+  color: var(--text);
+  font-size: 14px;
+}
+.cf-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+}
+
+/* Budget form and alerts */
+.cf-budget {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 12px;
+}
+.cf-budget label {
+  flex: 1 1 150px;
+}
+.cf-budget input {
+  color: var(--text);
+  font-size: 14px;
+}
+.cf-alerts ul {
+  margin: 0;
+  padding-left: 18px;
+  display: grid;
+  gap: 8px;
+}
+
+/* Mobile: tables become stacked label/value cards */
+@media (max-width: 760px) {
+  .cf-page .table-scroll .cf-table {
+    min-width: 0;
+  }
+  .cf-page .table-scroll.tall {
+    max-height: none;
+  }
+  .cf-page .cf-table,
+  .cf-page .cf-table tbody,
+  .cf-page .cf-table tr {
+    display: block;
+  }
+  .cf-page .cf-table thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+  .cf-page .cf-table tbody tr {
+    padding: 12px 0;
+    border-bottom: 1px solid var(--line-soft);
+  }
+  .cf-page .cf-table tbody tr:first-child {
+    padding-top: 0;
+  }
+  .cf-page .cf-table tbody tr:last-child {
+    padding-bottom: 0;
+    border-bottom: 0;
+  }
+  .cf-page .cf-table td,
+  .cf-page .cf-table td.numeric {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 2px 12px;
+    padding: 3px 0;
+    border: 0;
+    text-align: right;
+    font-family: inherit;
+  }
+  .cf-page .cf-table td.numeric .cf-cell-value {
+    font-family: var(--mono);
+  }
+  .cf-page .cf-cell-label {
+    display: block;
+    color: var(--muted);
+    font-size: 12px;
+    text-align: left;
+  }
+  .cf-page .cf-cell-value {
+    margin-left: auto;
+    min-width: 0;
+    max-width: 100%;
+    overflow-wrap: break-word;
+  }
+  .cf-page .cf-table td.cf-title {
+    display: block;
+    padding-bottom: 6px;
+    font-size: 14px;
+    font-weight: 600;
+    text-align: left;
+  }
+  .cf-page .cf-table td.cf-stack {
+    display: block;
+    text-align: left;
+  }
+  .cf-page .cf-table td.cf-stack .cf-cell-label {
+    margin-bottom: 4px;
+  }
+  .cf-page .cf-table td.cf-buttons {
+    display: block;
+    padding-top: 8px;
+  }
+  .cf-page .cf-buttons .cf-cell-value {
+    flex-wrap: wrap;
+  }
+  .cf-page .cf-table td.cf-title .cf-cell-label,
+  .cf-page .cf-table td.cf-buttons .cf-cell-label {
+    display: none;
+  }
+  .cf-page .cf-table select {
+    width: 100%;
+    min-height: 40px;
+  }
+  .cf-page .cf-metrics {
+    min-width: 0;
+  }
+  .cf-page .cf-buttons button {
+    min-height: 40px;
+  }
+}
