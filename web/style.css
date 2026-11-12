@@ -17,15 +17,15 @@
   --sunken: #0d1420;
   --line: #22304a;
   --line-soft: #1c2840;
-  --control: #2c3d5c;
+  --control: #53688f;
   --text: #eef3fb;
   --muted: #9db0cc;
   --faint: #8396b3;
   --accent: #a9c9fa;
   --fea: #e8eef7;
   --lattice: #6f95cf;
-  --tone-2: #6f95cf;
-  --tone-3: #3e5a85;
+  --tone-2: #7aa6c2;
+  --tone-3: #5577aa;
   --warn: #f6c177;
   --error: #ff8a9c;
   --error-text: #ffa3b1;
@@ -71,7 +71,10 @@ button:hover {
 }
 button:disabled {
   opacity: 0.55;
-  cursor: wait;
+  cursor: not-allowed;
+}
+button[aria-disabled="true"] {
+  cursor: progress;
 }
 input,
 select {
@@ -103,6 +106,33 @@ summary:focus-visible,
 }
 .primary:hover {
   background: #c3d9fb;
+}
+.primary:disabled:hover {
+  background: var(--accent);
+}
+.skip-link {
+  position: absolute;
+  z-index: 20;
+  top: 8px;
+  left: 8px;
+  padding: 10px 16px;
+  border-radius: var(--control-radius);
+  background: var(--accent);
+  color: var(--canvas);
+  font-weight: 600;
+  text-decoration: none;
+  transform: translateY(-200%);
+}
+.skip-link:focus {
+  transform: none;
+}
+/* Programmatic focus targets (page heading, main) need no ring. */
+main:focus,
+h1[tabindex="-1"]:focus:not(:focus-visible) {
+  outline: none;
+}
+.nowrap {
+  white-space: nowrap;
 }
 h1,
 h2,
@@ -174,6 +204,7 @@ td.numeric,
 }
 .topbar nav {
   display: flex;
+  flex-wrap: wrap;
   gap: 2px;
   padding: 4px;
   background: var(--surface);
@@ -205,6 +236,9 @@ td.numeric,
   border-radius: var(--control-radius);
   font-size: 13px;
   color: #c3d0e3;
+}
+.access-short {
+  display: none;
 }
 .access-label svg {
   width: 14px;
@@ -279,6 +313,49 @@ main {
   fill: none;
   stroke: currentColor;
   stroke-width: 2;
+}
+.refresh button.is-spinning {
+  color: var(--accent);
+}
+.refresh button.is-spinning svg {
+  animation: spin 0.9s linear infinite;
+}
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+.range-notice {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 16px;
+  padding: 10px 12px 10px 16px;
+  border: 1px solid #5a4a20;
+  border-radius: var(--radius);
+  background: #1f1a0e;
+  color: #f2e3c0;
+  font-size: 13px;
+}
+.range-notice p {
+  flex: 1 1 240px;
+  min-width: 0;
+}
+.crash {
+  border-color: #6b3341;
+}
+.crash p {
+  color: var(--muted);
+}
+.crash-page {
+  max-width: 720px;
+  margin: 48px auto;
+}
+.crash-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 .scope {
   margin-top: -10px;
@@ -423,6 +500,9 @@ main {
   font-size: 12px;
   color: var(--faint);
 }
+.range-hint.range-error {
+  color: var(--error-text);
+}
 .content {
   display: flex;
   flex-direction: column;
@@ -458,6 +538,9 @@ main {
 }
 .demo-banner a {
   flex: none;
+  display: inline-flex;
+  align-items: center;
+  min-height: 36px;
   color: #f6d48a;
 }
 
@@ -509,6 +592,25 @@ main {
   font-size: 12px;
   color: var(--muted);
 }
+.panel-na {
+  padding-top: 12px;
+  padding-bottom: 12px;
+  background: var(--sunken);
+}
+.panel-na .na {
+  font-family: var(--mono);
+  font-weight: 500;
+  color: var(--text);
+}
+/* Collapsed N/A rows sit after the panels that apply, across the full width. */
+.grid-2 > .panel-na {
+  grid-column: 1 / -1;
+  order: 1;
+}
+.split > .panel.panel-na {
+  flex: 1 1 100%;
+  order: 1;
+}
 .panel-note {
   font-size: 12px;
   color: var(--muted);
@@ -553,14 +655,16 @@ main {
 
 /* Stat strip */
 .strip {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 170px), 1fr));
+  display: flex;
+  flex-wrap: wrap;
   background: var(--surface);
   border: 1px solid var(--line);
   border-radius: var(--radius);
   overflow: hidden;
 }
 .tile {
+  flex: 1 1 170px;
+  min-width: 0;
   padding: 14px 18px 16px;
   display: flex;
   flex-direction: column;
@@ -574,6 +678,10 @@ main {
 }
 .tile-gap .tile-value {
   color: #6d7f9c;
+  font-family: inherit;
+  font-size: 18px;
+  letter-spacing: 0;
+  line-height: 1.6;
 }
 .tile-label {
   font-size: 12px;
@@ -629,6 +737,10 @@ main {
   stroke-width: 2;
   stroke-linejoin: round;
   vector-effect: non-scaling-stroke;
+}
+.sparkline .sparkline-dot {
+  stroke-width: 6;
+  stroke-linecap: round;
 }
 
 /* Hero (Storage) */
@@ -694,6 +806,7 @@ main {
 .chart-plot {
   position: relative;
   margin-top: 14px;
+  container-type: inline-size;
 }
 .chart-plot svg {
   position: absolute;
@@ -745,7 +858,8 @@ main {
   position: absolute;
   pointer-events: none;
 }
-.peak i {
+.peak i,
+.point {
   position: absolute;
   width: 10px;
   height: 10px;
@@ -754,27 +868,37 @@ main {
   border: 2px solid;
   background: var(--canvas);
 }
+/*
+ * The label runs right of the peak in the left half and left of it in the
+ * right half, clamped so it never covers the y-axis labels (--gutter) or
+ * leaves the plot. --x is the peak position in percent of the plot width.
+ */
 .peak span {
+  --want: 8px;
   position: absolute;
   top: 10px;
-  transform: translateX(-50%);
-  padding: 4px 8px;
+  width: var(--w);
+  left: clamp(
+    calc(var(--gutter) - var(--x) * 1cqw),
+    var(--want),
+    calc(100cqw - var(--x) * 1cqw - var(--w))
+  );
+  padding: 3px 8px;
   border-radius: 6px;
   background: var(--fea);
   color: var(--canvas);
   font-family: var(--mono);
   font-size: 11px;
+  line-height: 1.4;
   white-space: nowrap;
-  display: flex;
-  flex-direction: column;
-  line-height: 1.25;
+  text-align: center;
 }
-.peak span.end {
-  transform: translateX(-100%);
+.peak.end span {
+  --want: calc(-8px - var(--w));
 }
-.peak small {
-  font-family: ui-sans-serif, sans-serif;
-  color: #46566e;
+.chart-single {
+  font-size: 12px;
+  color: var(--muted);
 }
 .chart-empty {
   position: absolute;
@@ -806,6 +930,7 @@ main {
 .more summary,
 .more-panel > summary {
   cursor: pointer;
+  padding: 4px 0;
   font-size: 12px;
   color: var(--muted);
 }
@@ -835,6 +960,16 @@ main {
 .stack-bar i {
   flex-basis: 0;
   min-width: 3px;
+}
+.stack-bar i,
+.swatch,
+.track i,
+.columns i,
+.peak i,
+.point,
+.chart-plot svg,
+.sparkline {
+  forced-color-adjust: none;
 }
 .stack-bar i.none {
   flex-grow: 1;
@@ -1021,6 +1156,22 @@ main {
 .table-scroll {
   overflow-x: auto;
 }
+/* Inset shade on the edge where columns are hidden; the hint above says so in text. */
+.table-scroll[data-more-end] {
+  box-shadow: inset -18px 0 12px -12px rgb(0 0 0 / 85%);
+}
+.table-scroll[data-more-start] {
+  box-shadow: inset 18px 0 12px -12px rgb(0 0 0 / 85%);
+}
+.table-scroll[data-more-start][data-more-end] {
+  box-shadow:
+    inset 18px 0 12px -12px rgb(0 0 0 / 85%),
+    inset -18px 0 12px -12px rgb(0 0 0 / 85%);
+}
+.scroll-hint {
+  font-size: 12px;
+  color: var(--muted);
+}
 .table-scroll.tall {
   max-height: 440px;
   overflow-y: auto;
@@ -1053,8 +1204,11 @@ tr:last-child td {
 th.numeric,
 td.numeric {
   text-align: right;
-  padding-right: 0;
   padding-left: 12px;
+}
+th:last-child,
+td:last-child {
+  padding-right: 0;
 }
 code {
   font-family: var(--mono);
@@ -1142,16 +1296,21 @@ footer {
   color: var(--faint);
 }
 
-@media (max-width: 760px) {
-  .topbar-inner {
-    padding: 12px 16px;
-  }
+@media (max-width: 960px) {
   .topbar nav {
     order: 3;
     width: 100%;
   }
   .topbar nav button {
-    flex: 1;
+    flex: 1 1 auto;
+    padding: 6px 10px;
+  }
+}
+@media (max-width: 760px) {
+  .topbar-inner {
+    padding: 12px 16px;
+  }
+  .topbar nav button {
     min-height: 40px;
     padding: 6px 4px;
     font-size: 13px;
@@ -1188,9 +1347,16 @@ footer {
   }
   .growth li {
     grid-template-columns: 84px minmax(0, 1fr) auto;
+    gap: 4px 12px;
+  }
+  .growth-name {
+    grid-row: 1 / 3;
   }
   .growth-range {
-    display: none;
+    grid-column: 2 / -1;
+    grid-row: 2;
+    font-size: 12px;
+    color: var(--muted);
   }
   .scope {
     margin-top: -8px;
@@ -1224,12 +1390,48 @@ footer {
     flex-direction: column;
     gap: 12px;
   }
-  .table-scroll table {
-    min-width: 520px;
+  /* Only tables with many columns keep a minimum width and scroll. */
+  .table-scroll.wide table {
+    min-width: 560px;
+  }
+}
+/* Touch targets of at least 44px on touch screens and narrow layouts. */
+@media (max-width: 760px), (pointer: coarse) {
+  button,
+  select,
+  input,
+  .app-select select,
+  .topbar nav button,
+  .range-option {
+    min-height: 44px;
+  }
+  .refresh button {
+    width: 44px;
+  }
+  .data-disclosure summary,
+  .more summary,
+  .more-panel > summary {
+    padding: 12px 0;
+    line-height: 20px;
+  }
+  .demo-banner a,
+  .skip-link {
+    min-height: 44px;
+  }
+}
+@media (max-width: 420px) {
+  .access-long {
+    display: none;
+  }
+  .access-short {
+    display: inline;
   }
 }
 @media (prefers-reduced-motion: reduce) {
   * {
     scroll-behavior: auto !important;
+  }
+  .refresh button.is-spinning svg {
+    animation: none;
   }
 }

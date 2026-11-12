@@ -1,6 +1,6 @@
 import React from "react";
 import { createRoot } from "react-dom/client";
-import { Dashboard } from "./Dashboard";
+import { Dashboard, ErrorBoundary } from "./Dashboard";
 import type { Range, Stats } from "./data";
 import type { CloudflareData } from "../src/cloudflare/model";
 async function loadCloudflare(signal: AbortSignal): Promise<CloudflareData> {
@@ -45,10 +45,12 @@ async function loadStats(range: Range, signal: AbortSignal): Promise<Stats> {
 }
 createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
-    <Dashboard
-      loadStats={loadStats}
-      loadCloudflare={loadCloudflare}
-      writeCloudflare={writeCloudflare}
-    />
+    <ErrorBoundary>
+      <Dashboard
+        loadStats={loadStats}
+        loadCloudflare={loadCloudflare}
+        writeCloudflare={writeCloudflare}
+      />
+    </ErrorBoundary>
   </React.StrictMode>,
 );
