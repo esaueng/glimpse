@@ -1,4 +1,5 @@
 import { configured, readData, setState } from "./store";
+import { isoDay, validDay } from "./model";
 import type { MonitorEnv } from "./env";
 export async function cloudflareApi(
   request: Request,
@@ -8,8 +9,17 @@ export async function cloudflareApi(
   if (
     url.pathname === "/api/cloudflare" &&
     ["GET", "HEAD"].includes(request.method)
-  )
-    return Response.json(await readData(env));
+  ) {
+    // Optional ?from=YYYY-MM-DD limits usage and charges to recent days; omitted, the full
+    // retained history is returned as before.
+    const from = url.searchParams.getAll("from");
+    if (
+      from.length > 1 ||
+      (from.length === 1 && (!validDay(from[0]!) || from[0]! > isoDay()))
+    )
+      return new Response("Invalid from date", { status: 400 });
+    return Response.json(await readData(env, { since: from[0] }));
+  }
   if (url.pathname !== "/api/cloudflare/settings")
     return new Response("Not found", { status: 404 });
   if (request.method !== "POST")
@@ -44,14 +54,15 @@ export async function cloudflareApi(
     }
     value += decoder.decode();
   }
-  let v: any;
+  let parsed: unknown;
   try {
-    v = JSON.parse(value);
+    parsed = JSON.parse(value);
   } catch {
     return new Response("Invalid JSON", { status: 400 });
   }
-  if (!v || typeof v !== "object" || Array.isArray(v))
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed))
     return new Response("Invalid settings", { status: 400 });
+  const v = parsed as Record<string, unknown>;
   const keys = Object.keys(v).sort().join(",");
   const budgetValid = (b: unknown) =>
     b === null ||
@@ -83,6 +94,7 @@ export async function cloudflareApi(
     typeof v.name === "string" &&
     v.name.trim().length > 0 &&
     v.name.length <= 100 &&
+    typeof v.visibility === "string" &&
     ["public", "private", "unknown"].includes(v.visibility) &&
     budgetValid(v.budget)
   ) {

@@ -1,4 +1,11 @@
 // Infrastructure metadata is independent of the consent-gated app analytics contract.
+import { DAY, isoDay, validDay } from "../dates";
+export { DAY, isoDay, validDay };
+// Deliberate safety pin: collection only proceeds when the token's account has this name.
+export const ACCOUNT_NAME = "Esau" as const;
+export const CONNECTION_SOURCE = `${ACCOUNT_NAME} connection`;
+// Data-free heartbeat written by the daily app-analytics retention cron.
+export const RETENTION_SOURCE = "Analytics retention";
 export type Visibility = "public" | "private" | "unknown";
 export type ResourceKind =
   | "Workers"
@@ -64,7 +71,7 @@ export type Coverage = {
 };
 export type CloudflareData = {
   configured: boolean;
-  account: "Esau";
+  account: typeof ACCOUNT_NAME;
   apps: App[];
   resources: Resource[];
   usage: Usage[];
@@ -75,13 +82,22 @@ export type CloudflareData = {
   budget: number | null;
   receivedAt: string;
 };
-export const DAY = 86400000;
-export const isoDay = (date = new Date()) => date.toISOString().slice(0, 10);
 export const resourceKey = (kind: string, id: string) => `${kind}:${id}`;
-export const money = (value: number, currency = "USD") =>
-  new Intl.NumberFormat(undefined, { style: "currency", currency }).format(
-    value / 1e6,
-  );
+// Amounts are integer microcurrency. An unknown or malformed currency code (for example from
+// a URL filter) falls back to a plain number followed by the code instead of throwing.
+export const money = (value: number, currency = "USD") => {
+  try {
+    return new Intl.NumberFormat(undefined, {
+      style: "currency",
+      currency,
+    }).format(value / 1e6);
+  } catch {
+    return `${new Intl.NumberFormat(undefined, {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }).format(value / 1e6)} ${String(currency).slice(0, 12)}`.trimEnd();
+  }
+};
 export const micros = (n: unknown): number | null =>
   typeof n === "number" && Number.isFinite(n) && Math.abs(n) <= 1e9
     ? Math.round(n * 1e6)
@@ -90,13 +106,6 @@ export const finite = (n: unknown): number | null =>
   typeof n === "number" && Number.isFinite(n) && n >= 0 ? n : null;
 export const text = (s: unknown, max = 200): string =>
   typeof s === "string" ? s.slice(0, max) : "";
-export function validDay(s: string) {
-  return (
-    /^\d{4}-\d{2}-\d{2}$/.test(s) &&
-    !Number.isNaN(Date.parse(s)) &&
-    isoDay(new Date(s)) === s
-  );
-}
 export function validRange(from: string, to: string, now = new Date()) {
   return (
     validDay(from) &&
@@ -112,7 +121,7 @@ export function emptyData(
 ): CloudflareData {
   return {
     configured,
-    account: "Esau",
+    account: ACCOUNT_NAME,
     apps: [],
     resources: [],
     usage: [],
@@ -258,21 +267,36 @@ export function allocate(
   resources: Resource[],
 ) {
   const owners = new Map(resources.map((r) => [r.id, r.app]));
+  // Index summed usage once by metric, day and owning app: O(usage + charges × days × apps)
+  // instead of scanning all usage for every charge.
+  const index = new Map<string, Map<string, Map<string, number>>>();
+  for (const u of usage) {
+    if (u.aggregation !== "sum") continue;
+    const days = index.get(u.metric) ?? new Map<string, Map<string, number>>();
+    index.set(u.metric, days);
+    const apps = days.get(u.day) ?? new Map<string, number>();
+    days.set(u.day, apps);
+    const app = owners.get(u.resource) ?? "unassigned";
+    apps.set(app, (apps.get(app) ?? 0) + u.value);
+  }
   const result = new Map<string, number>();
   for (const charge of charges) {
     const metric = allocationMetric(charge);
     const weights = new Map<string, number>();
-    for (const u of usage)
-      if (
-        metric &&
-        u.metric === metric &&
-        u.aggregation === "sum" &&
-        u.day >= charge.start.slice(0, 10) &&
-        u.day < charge.end.slice(0, 10)
-      ) {
-        const app = owners.get(u.resource) ?? "unassigned";
-        weights.set(app, (weights.get(app) ?? 0) + u.value);
-      }
+    const days = metric ? index.get(metric) : undefined;
+    const from = charge.start.slice(0, 10),
+      to = charge.end.slice(0, 10);
+    const add = (day: string) => {
+      for (const [app, value] of days?.get(day) ?? [])
+        weights.set(app, (weights.get(app) ?? 0) + value);
+    };
+    if (days && from < to) {
+      const span = (Date.parse(to) - Date.parse(from)) / DAY;
+      if (Number.isFinite(span) && span <= days.size)
+        for (let t = Date.parse(from); t < Date.parse(to); t += DAY)
+          add(isoDay(new Date(t)));
+      else for (const day of days.keys()) if (day >= from && day < to) add(day);
+    }
     const total = [...weights.values()].reduce((a, b) => a + b, 0);
     if (!total) {
       result.set("unassigned", (result.get("unassigned") ?? 0) + charge.cost);
@@ -326,8 +350,11 @@ export type MonitorAlert = {
 export function alerts(data: CloudflareData, now = new Date()): MonitorAlert[] {
   const output: MonitorAlert[] = [];
   for (const c of data.coverage) {
+    // Unsupported datasets are a stable property of the account or plan, not a failure:
+    // alerting on them would repeat every day without any action to take.
+    if (c.status === "unsupported") continue;
     const maxAge =
-      c.source.includes(" usage") || c.source === "Esau connection"
+      c.source.includes(" usage") || c.source === CONNECTION_SOURCE
         ? 3 * 3600000
         : 48 * 3600000;
     if (c.status !== "ok" || now.getTime() - Date.parse(c.checkedAt) > maxAge)
@@ -346,7 +373,7 @@ export function alerts(data: CloudflareData, now = new Date()): MonitorAlert[] {
   );
   const allocations = allocate(charges, data.usage, data.resources);
   for (const scope of [
-    { id: "account", name: "Esau", budget: data.budget },
+    { id: "account", name: ACCOUNT_NAME, budget: data.budget },
     ...data.apps,
   ]) {
     if (!scope.budget) continue;
@@ -367,7 +394,7 @@ export function alerts(data: CloudflareData, now = new Date()): MonitorAlert[] {
   if (data.budget && projected !== null && projected > data.budget)
     output.push({
       id: `forecast:${period.start}`,
-      message: `Esau metered usage is projected to reach ${money(projected)}, above the ${money(data.budget)} budget.`,
+      message: `${ACCOUNT_NAME} metered usage is projected to reach ${money(projected)}, above the ${money(data.budget)} budget.`,
       severity: "warning",
     });
   const daily = new Map<string, number>();

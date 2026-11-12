@@ -1,9 +1,10 @@
 import { WorkerEntrypoint } from "cloudflare:workers";
 import { census, CENSUS_FIELDS } from "./expanded";
-import { authorized } from "./auth";
+import { access } from "./auth";
 import { dateRange, metric, type App } from "./contract";
 import { cloudflareApi } from "./cloudflare/api";
-import { collect } from "./cloudflare/collect";
+import { logFailure } from "./errors";
+import { runScheduled } from "./schedule";
 export async function record(
   env: Pick<Env, "DB">,
   app: App,
@@ -25,11 +26,11 @@ export async function snapshot(
   app: App,
   value: unknown,
   now = new Date(),
-) {
+): Promise<{ accepted: boolean }> {
   const c = census(value, app);
   if (!c) throw new Error("Invalid census");
   const fields = ["generation", ...CENSUS_FIELDS] as const;
-  await env.DB.prepare(
+  const result = await env.DB.prepare(
     `INSERT INTO daily_census(day,app,${fields.join(",")}) SELECT ?,?,${fields.map(() => "?").join(",")} WHERE ? > COALESCE((SELECT MAX(generation) FROM daily_census WHERE app=?),0)
     ON CONFLICT(day,app) DO UPDATE SET ${fields.map((k) => `${k}=excluded.${k}`).join(",")}
     WHERE excluded.generation > daily_census.generation
@@ -43,11 +44,14 @@ export async function snapshot(
       app,
     )
     .run();
+  // A snapshot older than (or equal to) the newest stored generation is not written.
+  return { accepted: result.meta.changes > 0 };
 }
 // Binding entrypoints fix app identity. There is intentionally no HTTP ingest API.
 export class OpenZCADIngest extends WorkerEntrypoint<Env> {
+  // Resolves { accepted: false } when a newer generation is already stored.
   async snapshot(value: unknown) {
-    await snapshot(this.env, "openzcad", value);
+    return snapshot(this.env, "openzcad", value);
   }
   async record(value: unknown) {
     await record(this.env, "openzcad", value);
@@ -82,7 +86,15 @@ export default {
     const url = new URL(request.url);
     if (url.pathname === "/healthz" && ["GET", "HEAD"].includes(request.method))
       return protect(new Response(request.method === "HEAD" ? null : "ok"));
-    if (!(await authorized(request, env)))
+    const result = await access(request, env);
+    if (result === "unavailable")
+      return protect(
+        new Response("Authentication temporarily unavailable", {
+          status: 503,
+          headers: { "Retry-After": "60" },
+        }),
+      );
+    if (result !== "allowed")
       return protect(new Response("Authentication required", { status: 401 }));
     if (
       url.pathname === "/api/cloudflare" ||
@@ -90,7 +102,8 @@ export default {
     ) {
       try {
         return protect(await cloudflareApi(request, env));
-      } catch {
+      } catch (error) {
+        logFailure("Cloudflare monitor request failed", error);
         return protect(
           Response.json(
             {
@@ -149,23 +162,14 @@ export default {
       if (url.pathname.startsWith("/api/"))
         return protect(new Response("Not found", { status: 404 }));
       return protect(await env.ASSETS.fetch(request));
-    } catch {
+    } catch (error) {
+      logFailure("Analytics request failed", error);
       return protect(
         Response.json({ error: "Analytics unavailable" }, { status: 503 }),
       );
     }
   },
   async scheduled(controller, env) {
-    if (controller.cron === "17 * * * *") {
-      await collect(env);
-      return;
-    }
-    await env.DB.batch(
-      ["daily_counts", "daily_census"].map((table) =>
-        env.DB.prepare(
-          `DELETE FROM ${table} WHERE day < date('now','-89 days')`,
-        ),
-      ),
-    );
+    await runScheduled(controller.cron, env);
   },
 } satisfies ExportedHandler<Env>;

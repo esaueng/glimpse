@@ -78,6 +78,18 @@ beforeAll(async () => {
             }),
         },
         {
+          // Access signing-key endpoint outage: the certs URL fails for this instance.
+          name: "outage-collector",
+          modules: true,
+          script: bundle.outputFiles[0].text,
+          compatibilityDate: "2026-10-15",
+          compatibilityFlags: ["nodejs_compat"],
+          d1Databases: { DB: "outage-db" },
+          bindings: { ACCESS_ISSUER: issuer, ACCESS_AUD: "dashboard" },
+          serviceBindings: { ASSETS: () => new Response("<h1>Outage</h1>") },
+          outboundService: () => new Response("unavailable", { status: 503 }),
+        },
+        {
           name: "cad",
           modules: true,
           script: caller,
@@ -86,6 +98,7 @@ beforeAll(async () => {
             GLIMPSE: { name: "collector", entrypoint: "OpenZCADIngest" },
             RETENTION: { name: "collector", entrypoint: "CronProbe" },
             PREVIEW: "preview-collector",
+            OUTAGE: "outage-collector",
           },
         },
         {
@@ -249,6 +262,69 @@ describe("real Worker RPC, D1 and Access JWT", () => {
     expect(response.headers.get("content-security-policy")).toContain(
       "frame-ancestors 'none'",
     );
+  });
+  it("rejects algorithm-confusion tokens (HS256 and none)", async () => {
+    const jwk = await exportJWK(
+      (await generateKeyPair("RS256", { extractable: true })).publicKey,
+    );
+    const hs256 = await new SignJWT({})
+      .setProtectedHeader({ alg: "HS256", kid: "test" })
+      .setIssuer(issuer)
+      .setAudience("dashboard")
+      .setSubject("test")
+      .setIssuedAt()
+      .setExpirationTime("5m")
+      .sign(new TextEncoder().encode(String(jwk.n)));
+    const encode = (value: unknown) =>
+      Buffer.from(JSON.stringify(value)).toString("base64url");
+    const now = Math.floor(Date.now() / 1000);
+    const none = `${encode({ alg: "none", typ: "JWT" })}.${encode({
+      iss: issuer,
+      aud: "dashboard",
+      sub: "test",
+      iat: now,
+      exp: now + 300,
+    })}.`;
+    for (const bad of [hs256, none])
+      expect(
+        (
+          await mf.dispatchFetch("https://glimpse.test/api/stats", {
+            headers: { "Cf-Access-Jwt-Assertion": bad },
+          })
+        ).status,
+      ).toBe(401);
+  });
+  it("tolerates small clock skew but not stale tokens", async () => {
+    const now = Math.floor(Date.now() / 1000);
+    const signed = (exp: number) =>
+      new SignJWT({})
+        .setProtectedHeader({ alg: "RS256", kid: "test" })
+        .setIssuer(issuer)
+        .setAudience("dashboard")
+        .setSubject("test")
+        .setIssuedAt(exp - 300)
+        .setExpirationTime(exp)
+        .sign(privateKey);
+    const status = async (exp: number) =>
+      (
+        await mf.dispatchFetch("https://glimpse.test/", {
+          headers: { "Cf-Access-Jwt-Assertion": await signed(exp) },
+        })
+      ).status;
+    expect(await status(now - 30)).toBe(200);
+    expect(await status(now - 120)).toBe(401);
+  });
+  it("returns 503, not 401, when Access signing keys cannot be fetched", async () => {
+    const { OUTAGE: outage } = await mf.getBindings<{
+      OUTAGE: { fetch: typeof fetch };
+    }>("cad");
+    const response = await outage.fetch("https://glimpse.test/api/stats", {
+      headers: { "Cf-Access-Jwt-Assertion": token },
+    });
+    expect(response.status).toBe(503);
+    expect(response.headers.get("cache-control")).toContain("no-store");
+    // Requests without a token are still plain authentication failures.
+    expect((await outage.fetch("https://glimpse.test/")).status).toBe(401);
   });
   it("aggregates concurrently by app, day, level, event and bucket", async () => {
     const value = {
@@ -515,14 +591,22 @@ describe("expanded analytics", () => {
   });
   it("replaces cloud snapshots without summing accounts, rejects stale deliveries and hides them from Basic", async () => {
     const bindings = await mf.getBindings<{
-      GLIMPSE: { snapshot(v: unknown): Promise<void> };
+      GLIMPSE: { snapshot(v: unknown): Promise<{ accepted: boolean }> };
     }>("cad");
-    await bindings.GLIMPSE.snapshot({ ...validCensus, generation: 20 });
-    await bindings.GLIMPSE.snapshot({
-      ...validCensus,
-      generation: 10,
-      accounts: 1,
-    });
+    expect(
+      await bindings.GLIMPSE.snapshot({ ...validCensus, generation: 20 }),
+    ).toEqual({ accepted: true });
+    // A stale generation is reported to the caller instead of being dropped silently.
+    expect(
+      await bindings.GLIMPSE.snapshot({
+        ...validCensus,
+        generation: 10,
+        accounts: 1,
+      }),
+    ).toEqual({ accepted: false });
+    expect(
+      await bindings.GLIMPSE.snapshot({ ...validCensus, generation: 20 }),
+    ).toEqual({ accepted: false });
     await expect(async () => {
       await bindings.GLIMPSE.snapshot({ ...validCensus, email: "private" });
     }).rejects.toThrow();

@@ -151,9 +151,6 @@ export function parseReport(value: unknown): Report | null {
     if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
     const r = raw as Record<string, unknown>;
     if (
-      !r ||
-      typeof r !== "object" ||
-      Array.isArray(r) ||
       Object.keys(r).sort().join(",") !== "bucket,count,event" ||
       typeof r.event !== "string" ||
       typeof r.bucket !== "string" ||
