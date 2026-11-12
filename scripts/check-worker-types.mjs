@@ -73,22 +73,43 @@ if (write) {
   process.exit(0);
 }
 
-const committed = normalize(readFileSync(committedPath, 'utf8')).split('\n');
-const fresh = normalize(generated).split('\n');
+// Only the part derived from wrangler.jsonc (bindings, vars, compatibility date and flags)
+// is enforced. The runtime section tracks the installed workerd version, so enforcing it
+// would fail every Wrangler upgrade (including Dependabot PRs); a drift there is reported
+// as a warning instead. `npm run types` refreshes both parts.
+const RUNTIME_MARKER = '// Begin runtime types';
+/** @param {string} text */
+function split(text) {
+  const lines = normalize(text).split('\n');
+  const at = lines.indexOf(RUNTIME_MARKER);
+  const config = (at === -1 ? lines : lines.slice(0, at)).map((line) =>
+    line.replace(/workerd@\S+/, 'workerd@<installed>'),
+  );
+  return { config, runtime: at === -1 ? [] : lines.slice(at) };
+}
+const committedParts = split(readFileSync(committedPath, 'utf8'));
+const freshParts = split(generated);
+const committed = committedParts.config;
+const fresh = freshParts.config;
+const runtimeDrift =
+  committedParts.runtime.join('\n') !== freshParts.runtime.join('\n');
 const first = committed.findIndex((line, i) => line !== fresh[i]);
 if (first === -1 && committed.length === fresh.length) {
-  console.log(`PASS: ${committedName} matches \`wrangler types\` for wrangler.jsonc and the installed runtime.`);
+  console.log(`PASS: ${committedName} matches \`wrangler types\` for wrangler.jsonc.`);
+  if (runtimeDrift)
+    console.warn(
+      `WARN: the runtime types section differs from the installed workerd; run \`npm run types\` when convenient.`,
+    );
   process.exit(0);
 }
 const at = first === -1 ? Math.min(committed.length, fresh.length) : first;
 console.error(
   [
-    `FAIL: ${committedName} is stale. Run \`npm run types\` and commit the result.`,
+    `FAIL: ${committedName} is stale for wrangler.jsonc. Run \`npm run types\` and commit the result.`,
     `First difference at line ${at + 1}:`,
     `  committed: ${committed[at] ?? '<end of file>'}`,
     `  generated: ${fresh[at] ?? '<end of file>'}`,
-    'A wrangler.jsonc change (bindings, vars, compatibility date or flags) or a Wrangler/workerd',
-    'upgrade both change the generated types.',
+    'A wrangler.jsonc change (bindings, vars, compatibility date or flags) changes the generated types.',
   ].join('\n'),
 );
 process.exit(1);
