@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { build } from "esbuild";
 import { Miniflare, convertV4MiniflareOptions } from "miniflare";
-import { readFileSync } from "node:fs";
+import { applyMigrations } from "./d1-migrations";
 import {
   allocate,
   alerts,
@@ -379,17 +379,7 @@ beforeAll(async () => {
     }),
   );
   const db = await mf.getD1Database("DB");
-  for (const migration of [
-    "0001_aggregates.sql",
-    "0002_openlattice3d.sql",
-    "0003_census.sql",
-    "0004_cloudflare.sql",
-  ])
-    await db.exec(
-      readFileSync(`migrations/${migration}`, "utf8")
-        .replace(/--[^\n]*/g, "")
-        .replace(/\n/g, " "),
-    );
+  await applyMigrations(db);
 }, 30000);
 afterAll(async () => {
   await mf?.dispose();

@@ -1,0 +1,10 @@
+{
+  // Worker runtime: workerd types from worker-configuration.d.ts only. No DOM, no Node,
+  // so browser or Node globals in src/ are type errors.
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "lib": ["ES2022"],
+    "types": []
+  },
+  "include": ["src", "worker-configuration.d.ts"]
+}

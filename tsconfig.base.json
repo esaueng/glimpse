@@ -1,0 +1,14 @@
+{
+  // Shared compiler options. Each runtime has its own config:
+  // tsconfig.worker.json (src/, Workers types only), tsconfig.web.json (web/, DOM)
+  // and tsconfig.node.json (test/, Vite configs; DOM + Node + Workers).
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "strict": true,
+    "jsx": "react-jsx",
+    "skipLibCheck": true,
+    "noEmit": true
+  }
+}

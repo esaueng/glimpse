@@ -66,14 +66,18 @@ recorded in the ledger:
 - Collector hardening: alerts and retention run even when the identity check
   fails; unsupported datasets no longer stall backfill or send daily alerts;
   reads are capped instead of failing above 100,000 rows.
+- A pending-migration guard: `/api/stats` needs `0001`–`0003` and
+  `/api/cloudflare` needs `0004` in the D1 migration ledger, or they return a
+  503 naming the missing migration. Deploying it before `0004` is applied leaves
+  the Cloudflare page on that 503; analytics are unaffected.
 
 ## Hygiene backlog
 
 | Item | Why |
 | --- | --- |
-| Pending-migration check in the deploy flow | Migrations and the demo deploy are manual, while main deploys automatically, so code can reach production before its schema. A deploy step or start-up check should fail clearly when a required migration is missing |
-| Split `tsconfig` per runtime | One `tsconfig.json` covers `src`, `web` and `test` with both DOM and Node types, so Worker code can use browser globals without a type error |
-| Freshness check for `worker-configuration.d.ts` | The generated file is committed; CI does not check that it matches `wrangler.jsonc` after `npm run types` |
+| Pending-migration check in the deploy flow | Migrations and the demo deploy are manual, while main deploys automatically, so code can reach production before its schema. A deploy step or start-up check should fail clearly when a required migration is missing. **Done on this branch (not deployed):** `REQUIRED_MIGRATIONS` in `src/migrations.ts` (a test fails if any `migrations/*.sql` is missing from it); `/api/stats` and `/api/cloudflare` read the `d1_migrations` ledger and return a 503 naming the missing migration; ingestion RPC is unchanged |
+| Split `tsconfig` per runtime | One `tsconfig.json` covers `src`, `web` and `test` with both DOM and Node types, so Worker code can use browser globals without a type error. **Done on this branch (not deployed):** `tsconfig.worker.json` (Workers types only), `tsconfig.web.json` (DOM) and `tsconfig.node.json` (tests, scripts, Vite configs); `npm run typecheck` checks all three. No type errors surfaced in `src/` |
+| Freshness check for `worker-configuration.d.ts` | The generated file is committed; CI does not check that it matches `wrangler.jsonc` after `npm run types`. **Done on this branch (not deployed):** `npm run check:types` (in `npm run check` and CI) regenerates the types offline and diffs them; the committed file was stale against the installed workerd and was regenerated. A Wrangler upgrade now needs `npm run types` in the same change |
 | Component tests for `web/Cloudflare.tsx` and `web/views.tsx` | Current tests cover the Worker, data semantics, ranges, the demo and configuration, not rendered components |
 | Confirm where `.github/privacy` tests run | They run only in `history-privacy-request.yml` (pushes to any branch or tag, merge groups and fork pull requests), not in CI's `verify` job. Confirm this split is intended |
 | Shared web hooks and one `Tile` | `web/views.tsx` and `web/Cloudflare.tsx` each define a `Tile`, and `web/Dashboard.tsx` and `web/Cloudflare.tsx` each keep their own loading and URL-state logic. Extract shared `useLoader`/`useUrlState` hooks and one `Tile` |
