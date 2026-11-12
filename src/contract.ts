@@ -1,12 +1,8 @@
-import { expandedMetric } from "./expanded";
+import { isoDay, validDay } from "./dates";
+import { expandedMetric, TIMINGS } from "./expanded";
 // This vocabulary is the entire analytics schema. No free-text properties.
-export const BUCKETS = [
-  "lt_100ms",
-  "100ms_1s",
-  "1s_10s",
-  "10s_60s",
-  "gte_60s",
-] as const;
+// Latency buckets are the same timing vocabulary used by expanded metrics.
+export const BUCKETS = TIMINGS;
 export const BASIC = ["api_request", "api_error", "api_latency"] as const;
 export const OPTIONAL = [
   "workspace_opened",
@@ -100,21 +96,16 @@ export function dateRange(
     [...params.keys()].some((k) => params.getAll(k).length !== 1)
   )
     return null;
-  const to = params.get("to") ?? today.toISOString().slice(0, 10);
+  const to = params.get("to") ?? isoDay(today);
   const from =
-    params.get("from") ??
-    new Date(today.getTime() - 29 * 86400000).toISOString().slice(0, 10);
-  const valid = (s: string) =>
-    /^\d{4}-\d{2}-\d{2}$/.test(s) &&
-    Number.isFinite(Date.parse(s)) &&
-    new Date(s).toISOString().slice(0, 10) === s;
+    params.get("from") ?? isoDay(new Date(today.getTime() - 29 * 86400000));
   const app = params.get("app") ?? "all",
     level = params.get("level") ?? "basic";
   if (
-    !valid(from) ||
-    !valid(to) ||
+    !validDay(from) ||
+    !validDay(to) ||
     from > to ||
-    to > today.toISOString().slice(0, 10) ||
+    to > isoDay(today) ||
     (Date.parse(to) - Date.parse(from)) / 86400000 > 89 ||
     !["all", ...APPS].includes(app) ||
     !["basic", "optional"].includes(level)
