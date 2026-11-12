@@ -3,15 +3,15 @@ import { createRoot } from "react-dom/client";
 import { Dashboard, ErrorBoundary } from "./Dashboard";
 import type { Range, Stats } from "./data";
 import type { CloudflareData } from "../src/cloudflare/model";
+import { responseError } from "./api";
 async function loadCloudflare(signal: AbortSignal): Promise<CloudflareData> {
   const response = await fetch("/api/cloudflare", {
     cache: "no-store",
     signal,
   });
-  if (
-    !response.ok ||
-    !(response.headers.get("Content-Type") ?? "").includes("application/json")
-  )
+  if (!response.ok)
+    throw await responseError(response, "Cloudflare monitor unavailable");
+  if (!(response.headers.get("Content-Type") ?? "").includes("application/json"))
     throw new Error("Cloudflare monitor unavailable");
   return response.json();
 }
@@ -29,8 +29,10 @@ async function loadStats(range: Range, signal: AbortSignal): Promise<Stats> {
     cache: "no-store",
     signal,
   });
+  // A JSON `error` from the worker (e.g. a pending migration) is shown as is.
   if (!response.ok)
-    throw new Error(
+    throw await responseError(
+      response,
       response.status === 401
         ? "Sign in through Cloudflare Access."
         : response.status === 400

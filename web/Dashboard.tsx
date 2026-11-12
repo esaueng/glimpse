@@ -4,11 +4,11 @@ import {
   Suspense,
   useEffect,
   useRef,
-  useState,
   type ErrorInfo,
   type ReactNode,
 } from "react";
 import { appName, type Loaded, type Range, type Stats } from "./data";
+import { useLoader, useUrlState, writeSearch } from "./hooks";
 import { RangePicker } from "./RangePicker";
 import {
   formatRange,
@@ -162,18 +162,36 @@ export function Dashboard({
   writeCloudflare?: SettingsWriter;
   demo?: boolean;
 }) {
-  const [initial] = useState(readLocation),
-    [view, setView] = useState<View>(initial.view),
-    [filter, setFilter] = useState(initial.range),
-    [notice, setNotice] = useState(initial.notice);
-  const [data, setData] = useState<Loaded | null>(null),
-    [loading, setLoading] = useState(true),
-    [error, setError] = useState(""),
-    [refresh, setRefresh] = useState(0);
+  const [{ view, range: filter, notice }, setLocation] = useUrlState(
+    readLocation,
+    // Normalise an invalid link in place, without adding a history entry.
+    (next) => {
+      if (next.notice)
+        writeSearch(
+          scopeSearch(next.range, next.view.toLowerCase(), location.search),
+          "replace",
+        );
+    },
+  );
+  const setNotice = (notice: string) =>
+    setLocation((current) => ({ ...current, notice }));
   const { app, from, to } = filter;
   const analyticsView = view !== "Cloudflare" && view !== "Privacy";
-  const sequence = useRef(0),
-    heading = useRef<HTMLHeadingElement>(null),
+  // Basic and opt-in aggregates stay separate queries; each panel names its source.
+  const { data, loading, error, refresh } = useLoader<Loaded>(
+    (signal) =>
+      Promise.all([
+        loadStats({ app, from, to, level: "basic" }, signal),
+        loadStats({ app, from, to, level: "optional" }, signal),
+      ]).then(([basic, optional]) => ({ basic, optional })),
+    [app, from, to, loadStats],
+    {
+      enabled: analyticsView,
+      errorMessage: (e) =>
+        e instanceof Error ? e.message : "Analytics unavailable.",
+    },
+  );
+  const heading = useRef<HTMLHeadingElement>(null),
     shownView = useRef(view),
     baseTitle = useRef(document.title);
   /**
@@ -181,72 +199,25 @@ export function Dashboard({
    * forward move between pages; filter changes replace the current entry.
    * An invalid range is never applied or written to the URL.
    */
-  function apply(range: Scope, nextView: View = view, write = true) {
+  function apply(range: Scope, nextView: View = view) {
     if (!validScope(range)) {
       setNotice(
         `${formatRange(range.from, range.to)} is not a valid range of at most 90 UTC days ending by today, so the timeframe was not changed.`,
       );
       return;
     }
-    setNotice("");
-    setFilter({ ...range });
-    setView(nextView);
-    if (write) {
-      const search = scopeSearch(range, nextView.toLowerCase(), location.search);
-      if (search !== location.search)
-        history[nextView === view ? "replaceState" : "pushState"](null, "", search);
-    }
+    setLocation({ range: { ...range }, view: nextView, notice: "" });
+    writeSearch(
+      scopeSearch(range, nextView.toLowerCase(), location.search),
+      nextView === view ? "replace" : "push",
+    );
   }
-  useEffect(() => {
-    // Normalise an invalid link in place, without adding a history entry.
-    const normalise = (next: ReturnType<typeof readLocation>) => {
-      if (next.notice)
-        history.replaceState(
-          null,
-          "",
-          scopeSearch(next.range, next.view.toLowerCase(), location.search),
-        );
-    };
-    normalise(initial);
-    const restore = () => {
-      const next = readLocation();
-      normalise(next);
-      setFilter(next.range);
-      setView(next.view);
-      setNotice(next.notice);
-    };
-    window.addEventListener("popstate", restore);
-    return () => window.removeEventListener("popstate", restore);
-  }, []);
   useEffect(() => {
     document.title = `${view} · ${baseTitle.current}`;
     // Move focus to the new page heading on navigation, not on first load.
     if (shownView.current !== view) heading.current?.focus();
     shownView.current = view;
   }, [view]);
-  useEffect(() => {
-    if (!analyticsView) return;
-    const current = ++sequence.current,
-      controller = new AbortController();
-    setLoading(true);
-    setError("");
-    // Basic and opt-in aggregates stay separate queries; each panel names its source.
-    void Promise.all([
-      loadStats({ app, from, to, level: "basic" }, controller.signal),
-      loadStats({ app, from, to, level: "optional" }, controller.signal),
-    ])
-      .then(([basic, optional]) => {
-        if (current === sequence.current) setData({ basic, optional });
-      })
-      .catch((e) => {
-        if (!controller.signal.aborted && current === sequence.current)
-          setError(e instanceof Error ? e.message : "Analytics unavailable.");
-      })
-      .finally(() => {
-        if (current === sequence.current) setLoading(false);
-      });
-    return () => controller.abort();
-  }, [analyticsView, app, from, to, refresh, loadStats]);
   const applied = data?.basic.range ?? { ...filter, level: "basic" };
   return (
     <>
@@ -367,11 +338,14 @@ export function Dashboard({
                   className={loading ? "is-spinning" : undefined}
                   onClick={() => {
                     if (loading) return;
-                    setFilter((current) => ({
+                    setLocation((current) => ({
                       ...current,
-                      ...refreshedTimeframe(current),
+                      range: {
+                        ...current.range,
+                        ...refreshedTimeframe(current.range),
+                      },
                     }));
-                    setRefresh((current) => current + 1);
+                    refresh();
                   }}
                 >
                   <svg viewBox="0 0 24 24" aria-hidden="true">

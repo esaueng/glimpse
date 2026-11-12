@@ -1,6 +1,7 @@
 // Cloudflare page filters live in cf_* URL parameters next to the dashboard's
 // own app/range/from/to/view parameters, which are always preserved.
 import { validDay, type CloudflareData } from "../../src/cloudflare/model";
+import { writeSearch, type HistoryMode } from "../hooks";
 import { isCurrency } from "./format";
 
 export type Filters = {
@@ -36,7 +37,7 @@ export function readFilters(search = location.search): Filters {
 }
 
 /** Writes filters to the URL. Discrete choices push; typing replaces. */
-export function writeFilters(filters: Filters, mode: "push" | "replace") {
+export function writeFilters(filters: Filters, mode: HistoryMode) {
   const q = new URLSearchParams(location.search);
   q.set("view", "cloudflare");
   for (const key of keys) {
@@ -44,10 +45,7 @@ export function writeFilters(filters: Filters, mode: "push" | "replace") {
     if (value && value !== defaultFilters[key]) q.set(`cf_${key}`, value);
     else q.delete(`cf_${key}`);
   }
-  const url = `?${q}`;
-  if (url === location.search) return;
-  if (mode === "push") history.pushState(history.state, "", url);
-  else history.replaceState(history.state, "", url);
+  writeSearch(`?${q}`, mode);
 }
 
 export const productOptions = (data: CloudflareData) =>
