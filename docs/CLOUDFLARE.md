@@ -76,7 +76,9 @@ at-least-once behavior around failures. No destination is configured by default.
 ## Rollout
 
 Production configuration enables monitoring once the migration and secrets are
-in place. Previews remain disabled. Under production migration/deployment
+in place. Previews remain disabled. Whether these steps have been carried out in
+production is not recorded; the [roadmap](ROADMAP.md#open-rollout-and-verification-items)
+tracks the checks. Under production migration/deployment
 authorization:
 
 1. Run the coverage command with the intended read-only token.

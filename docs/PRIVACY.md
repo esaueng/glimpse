@@ -11,6 +11,8 @@ or change any application's consent controls.
 
 Reviewed 15 October 2026. This records a technical approach and its limits; it is not a blanket legal exemption or a production compliance certification.
 
+**Review pending.** The infrastructure-monitor paragraph above was added on 24 October 2026 with the Cloudflare page (#26), after the last full review. It has not been through that review. Open questions include the 400-day retention of `cf_*` history, which is longer than the 90-day analytics retention, and the dashboard's write path for budgets and manual app mappings (`POST /api/cloudflare/settings`, behind Access). The review is tracked in the [roadmap](ROADMAP.md#open-rollout-and-verification-items).
+
 ## Two distinct purposes
 
 **Basic statistics** count API requests, server failures (HTTP 5xx), and response time buckets inside each app Worker. They observe work the server already performs. They never read browser storage, add a client ping, or receive model/project attributes. Static asset requests and health probes are excluded. They are operation counts, not visits, users, sessions, or adoption estimates. Browser-local exports and solves cannot be counted this way: the dashboard marks these as opt-in only in Basic mode.

@@ -6,7 +6,7 @@ gradients, tracking or fetched fonts (system sans and monospace stacks only,
 within the existing `style-src 'self'` policy).
 
 Top bar: Glimpse mark, segmented navigation (Overview, Issues, Storage,
-Privacy), access label. Toolbar, one row: page title, timeframe picker, app
+Cloudflare, Privacy), access label. Toolbar, one row: page title, timeframe picker, app
 select, last update and icon Refresh. Changes apply immediately. One
 applied-scope line states that basic counts cover all users and opt-in figures
 cover opted-in users only. Every opt-in panel carries an "Opted-in users" badge
@@ -44,6 +44,19 @@ Pages:
   stored and project data over time; snapshot project-size ranges; saved,
   upload and download size observations; cloud saves under 1 s; daily snapshot
   history in a scrolling table.
+- Cloudflare: Esau infrastructure usage and costs, separate from application
+  analytics and read from the private `cf_*` tables (see
+  [CLOUDFLARE.md](CLOUDFLARE.md)). A stat strip of metered or allocated usage
+  cost, fixed subscriptions, projected metered cost and account budget
+  remaining; a "Needs attention" list of cost and collection alerts; daily
+  metered cost by product with its data table; product usage and cost;
+  applications with allocated costs and owner-editable app mappings and
+  budgets; resource usage and ownership; fixed subscriptions; budget
+  monitoring; and collection coverage per source with status and last
+  success. Until the monitor is configured it shows connection guidance
+  instead. Budget and app-mapping edits are sent to
+  `POST /api/cloudflare/settings` behind Access; the analytics pages are
+  read-only.
 - Privacy: unchanged collection boundaries and consent text.
 
 Palette: canvas #0a0f18, surface #111a28, sunken #0d1420, line #22304a, soft

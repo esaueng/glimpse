@@ -14,7 +14,8 @@
   <a href="https://glimpse.esau.app">Private dashboard · Access required</a> ·
   <a href="docs/SETUP.md">Setup</a> ·
   <a href="docs/PRIVACY.md">Privacy</a> ·
-  <a href="docs/VALIDATION.md">Validation & rollout</a>
+  <a href="docs/VALIDATION.md">Validation & rollout</a> ·
+  <a href="docs/ROADMAP.md">Roadmap</a>
 </p>
 
 Glimpse brings application activity, performance, storage, and diagnostics into a
@@ -66,8 +67,8 @@ not collected yet are listed in [proposed metrics](docs/PROPOSED-METRICS.md).
 
 Support in this repository does not establish that an integration is enabled or
 verified in production. The [validation ledger](docs/VALIDATION.md) records prior
-checks and remaining rollout work; the [setup guide](docs/SETUP.md) covers the
-required migrations and deployment order.
+checks, the [roadmap](docs/ROADMAP.md) lists remaining rollout work, and the
+[setup guide](docs/SETUP.md) covers the required migrations and deployment order.
 
 ## How data reaches Glimpse
 
@@ -171,7 +172,7 @@ not migrate or deploy anything.
 
 | Location | Contents |
 | --- | --- |
-| [`src/`](src/) | Worker, Access verification, metric/census contracts, report validation |
+| [`src/`](src/) | Worker, Access verification, metric/census contracts, report validation; [`src/cloudflare/`](src/cloudflare/) holds the Cloudflare usage and cost collector and API |
 | [`web/`](web/) | Dashboard views, charts, filters, and local report inspector |
 | [`migrations/`](migrations/) | Ordered D1 schema migrations |
 | [`test/`](test/) | Service, data-semantics, and preview-configuration regressions |
@@ -184,6 +185,8 @@ not migrate or deploy anything.
 | [Privacy & consent](docs/PRIVACY.md) | Collection boundaries, consent, and infrastructure limits |
 | [Expanded analytics](docs/EXPANDED-ANALYTICS.md) | Measurement definitions, account permission, reports, and v2 rollout |
 | [Validation ledger](docs/VALIDATION.md) | Recorded local/hosted checks and unverified production work |
+| [Roadmap](docs/ROADMAP.md) | Current state, open rollout checks, hygiene backlog, feature candidates and non-goals |
+| [Cloudflare monitor](docs/CLOUDFLARE.md) | Esau usage and cost collection, interpretation, budgets and rollout |
 | [Dashboard design](docs/DASHBOARD-DESIGN.md) | Interface behavior and measurement presentation |
 | [Proposed metrics](docs/PROPOSED-METRICS.md) | Candidate opt-in and snapshot metrics awaiting privacy review |
 | [Brand](docs/BRAND.md) | Logo variants, palette, and icon exports |
