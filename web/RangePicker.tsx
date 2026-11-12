@@ -1,9 +1,18 @@
-import { useEffect, useId, useRef, useState } from "react";
+import {
+  useEffect,
+  useId,
+  useRef,
+  useState,
+  type KeyboardEvent as ReactKeyboardEvent,
+} from "react";
 import {
   calendarPresets,
+  customRangeError,
   formatRange,
+  MAX_DAYS,
   presetRange,
   rollingPresets,
+  shiftDay,
   spanDays,
   type Preset,
 } from "./ranges";
@@ -29,7 +38,8 @@ export function RangePicker({
   const root = useRef<HTMLDivElement>(null),
     trigger = useRef<HTMLButtonElement>(null),
     panel = useRef<HTMLDivElement>(null),
-    id = useId();
+    id = useId(),
+    errorId = `${id}-error`;
   function close(focus = true) {
     setOpen(false);
     setCustom(false);
@@ -38,9 +48,11 @@ export function RangePicker({
   useEffect(() => {
     if (!open) return;
     setDraft({ from: value.from, to: value.to });
-    panel.current
-      ?.querySelector<HTMLButtonElement>('[aria-pressed="true"], button')
-      ?.focus();
+    // Start on the current selection; fall back to the first option.
+    (
+      panel.current?.querySelector<HTMLButtonElement>('[aria-pressed="true"]') ??
+      panel.current?.querySelector<HTMLButtonElement>("button")
+    )?.focus();
     const outside = (e: PointerEvent) => {
         if (!root.current?.contains(e.target as Node)) close(false);
       },
@@ -75,16 +87,47 @@ export function RangePicker({
       </button>
     );
   };
-  const span = spanDays(value.from, value.to);
+  // Arrow keys, Home and End move between the preset options.
+  const navigate = (e: ReactKeyboardEvent<HTMLDivElement>) => {
+    const options = [
+        ...(panel.current?.querySelectorAll<HTMLButtonElement>(".range-option") ?? []),
+      ],
+      index = options.indexOf(e.target as HTMLButtonElement);
+    if (index < 0) return;
+    const next =
+      e.key === "ArrowDown" || e.key === "ArrowRight"
+        ? (index + 1) % options.length
+        : e.key === "ArrowUp" || e.key === "ArrowLeft"
+          ? (index - 1 + options.length) % options.length
+          : e.key === "Home"
+            ? 0
+            : e.key === "End"
+              ? options.length - 1
+              : -1;
+    if (next < 0) return;
+    e.preventDefault();
+    options[next]?.focus();
+  };
+  const span = spanDays(value.from, value.to),
+    now = today(),
+    problem = customRangeError(draft.from, draft.to);
   return (
-    <div className="range-picker" ref={root}>
+    <div
+      className="range-picker"
+      ref={root}
+      onBlur={(e) => {
+        // Close when keyboard focus moves outside the picker.
+        const next = e.relatedTarget as Node | null;
+        if (open && next && !root.current?.contains(next)) close(false);
+      }}
+    >
       <button
         ref={trigger}
         type="button"
         className="range-trigger"
         aria-haspopup="dialog"
         aria-expanded={open}
-        aria-controls={id}
+        aria-controls={open ? id : undefined}
         disabled={disabled}
         onClick={() => (open ? close() : setOpen(true))}
       >
@@ -104,6 +147,7 @@ export function RangePicker({
           ref={panel}
           role="dialog"
           aria-label="Choose a timeframe"
+          onKeyDown={navigate}
         >
           <div className="range-list">{rollingPresets.map(option)}</div>
           <div className="range-grid">
@@ -114,6 +158,7 @@ export function RangePicker({
               className="range-custom"
               onSubmit={(e) => {
                 e.preventDefault();
+                if (problem) return;
                 onChange({ from: draft.from, to: draft.to });
                 close();
               }}
@@ -125,7 +170,10 @@ export function RangePicker({
                   required
                   type="date"
                   value={draft.from}
-                  max={draft.to}
+                  min={draft.to ? shiftDay(draft.to, 1 - MAX_DAYS) : undefined}
+                  max={draft.to || now}
+                  aria-invalid={problem ? true : undefined}
+                  aria-describedby={errorId}
                   onChange={(e) => setDraft({ ...draft, from: e.target.value })}
                 />
               </label>
@@ -135,13 +183,22 @@ export function RangePicker({
                   required
                   type="date"
                   value={draft.to}
-                  min={draft.from}
-                  max={today()}
+                  min={draft.from || undefined}
+                  max={now}
+                  aria-invalid={problem ? true : undefined}
+                  aria-describedby={errorId}
                   onChange={(e) => setDraft({ ...draft, to: e.target.value })}
                 />
               </label>
-              <p className="range-hint">UTC days · up to 90 days</p>
-              <button className="primary" type="submit">
+              <p
+                id={errorId}
+                className={problem ? "range-hint range-error" : "range-hint"}
+                aria-live="polite"
+              >
+                {problem ||
+                  `${spanDays(draft.from, draft.to)} UTC days · up to ${MAX_DAYS}`}
+              </p>
+              <button className="primary" type="submit" disabled={!!problem}>
                 Apply
               </button>
             </form>

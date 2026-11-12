@@ -138,6 +138,6 @@ describe("dashboard measurement semantics", () => {
     expect(latestCensus([old, current])).toBe(current);
     expect(latestCensus([])).toBeUndefined();
     expect(bytes(0)).toBe("0 B");
-    expect(bytes(1048576)).toBe("1 MiB");
+    expect(bytes(1048576)).toBe("1.0 MiB");
   });
 });

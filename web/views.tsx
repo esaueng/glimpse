@@ -3,10 +3,14 @@ import { APPS, BUCKETS, type App, type Row } from "../src/contract";
 import { EXPANDED, PARTS, SIZES, TIMINGS } from "../src/expanded";
 import {
   Columns,
+  DataTable,
+  Legend,
   LineChart,
   RankBars,
   Sparkline,
   StackBar,
+  TableScroll,
+  shortDay,
   sizeLabels,
   timingLabels,
   type Tone,
@@ -22,6 +26,8 @@ import {
   isErrorCode,
   number,
   percent,
+  ratio,
+  signed,
   total,
   type Loaded,
 } from "./data";
@@ -41,16 +47,14 @@ const appTone: Record<App, Tone> = {
 };
 const timingTones: Tone[] = ["accent", "tone-2", "tone-3", "warn", "error"];
 const sizeTones: Tone[] = ["accent", "tone-2", "tone-3", "warn"];
-const shortDay = (day: string) =>
-  new Date(`${day}T00:00:00Z`).toLocaleDateString(undefined, {
-    day: "numeric",
-    month: "short",
-    timeZone: "UTC",
-  });
-const signed = (n: number) => `${n < 0 ? "−" : "+"}${number(Math.abs(n))}`;
 const includes = (scope: string, app: App) => scope === "all" || scope === app;
-const ratio = (a: number, b: number) =>
-  b ? (a / b).toLocaleString(undefined, { maximumFractionDigits: 1 }) : "—";
+/** "OpenZCAD only" or "OpenZCAD and OpenFEA only" when the app filter excludes every owner. */
+const notApplicable = (scope: string, owners: App[]) =>
+  owners.some((a) => includes(scope, a))
+    ? undefined
+    : `${owners.map(appName).join(" and ")} only`;
+// Opt-in detail (operations, categories, sizes, diagnostics) exists for these apps.
+const EXPANDED_APPS: App[] = ["openzcad", "openfea"];
 
 function Tile({
   label,
@@ -77,14 +81,28 @@ function Panel({
   children,
   className = "",
   level = 2,
+  na,
 }: {
   title: string;
   note?: ReactNode;
-  children: ReactNode;
+  children?: ReactNode;
   className?: string;
   level?: 2 | 3;
+  /** Set when the app filter excludes the owning app: the panel collapses to one N/A row. */
+  na?: string;
 }) {
   const Heading = level === 2 ? "h2" : "h3";
+  if (na)
+    return (
+      <section className={`panel panel-na ${className}`}>
+        <div className="panel-heading">
+          <Heading>{title}</Heading>
+          <span className="panel-meta">
+            <strong className="na">N/A</strong> · {na}
+          </span>
+        </div>
+      </section>
+    );
   return (
     <section className={`panel ${className}`}>
       <div className="panel-heading">
@@ -162,8 +180,8 @@ export function Overview({ data, app }: { data: Loaded; app: string }) {
           People and accounts
         </h2>
         <div className="strip">
-          <Tile label="Total users" value="—" gap>
-            Not collected. Glimpse keeps no per-person data.
+          <Tile label="Total users" value="Not collected" gap>
+            Glimpse keeps no per-person data.
           </Tile>
           <Tile label="Opted-in cloud accounts" value={census("accounts")}>
             {change("accounts")}
@@ -192,10 +210,9 @@ export function Overview({ data, app }: { data: Loaded; app: string }) {
           title="Cloud growth"
           note="Daily OpenZCAD snapshots"
           className="wide"
+          na={notApplicable(app, ["openzcad"])}
         >
-          {!cloud ? (
-            <p className="empty">Cloud snapshots exist for OpenZCAD only.</p>
-          ) : !latest || !first ? (
+          {!latest || !first ? (
             <p className="empty">No snapshot received in this range.</p>
           ) : (
             <>
@@ -211,16 +228,15 @@ export function Overview({ data, app }: { data: Loaded; app: string }) {
                   <li key={key}>
                     <span className="growth-name">{name}</span>
                     <Sparkline
-                      label={`${name} per day`}
+                      label={`${name} trend`}
                       values={history.map((c) => c[key])}
+                      format={format}
                     />
                     <span className="numeric growth-range">
                       {format(first[key])} → {format(latest[key])}
                     </span>
                     <span className="numeric growth-change">
-                      {key === "storedBytes"
-                        ? `${latest[key] >= first[key] ? "+" : "−"}${bytes(Math.abs(latest[key] - first[key]))}`
-                        : signed(latest[key] - first[key])}
+                      {signed(latest[key] - first[key], format)}
                     </span>
                   </li>
                 ))}
@@ -292,25 +308,21 @@ export function Overview({ data, app }: { data: Loaded; app: string }) {
             level={3}
             title="Top CAD operations"
             note={`OpenZCAD · ${number(operations.length)} kinds seen`}
+            na={notApplicable(app, ["openzcad"])}
           >
-            {includes(app, "openzcad") ? (
-              <>
-                <RankBars items={operations.slice(0, 8)} />
-                {operations.length > 8 && (
-                  <details className="more">
-                    <summary>All {operations.length} operations</summary>
-                    <RankBars items={operations.slice(8)} />
-                  </details>
-                )}
-              </>
-            ) : (
-              <p className="empty">CAD operations exist for OpenZCAD only.</p>
+            <RankBars items={operations.slice(0, 8)} />
+            {operations.length > 8 && (
+              <details className="more">
+                <summary>All {operations.length} operations</summary>
+                <RankBars items={operations.slice(8)} />
+              </details>
             )}
           </Panel>
           <Panel
             level={3}
             title="What people work on"
             note="Feature categories · OpenZCAD and OpenFEA"
+            na={notApplicable(app, EXPANDED_APPS)}
           >
             {categoryTotal ? (
               <ul className="category-grid">
@@ -332,33 +344,29 @@ export function Overview({ data, app }: { data: Loaded; app: string }) {
             level={3}
             title="Simulation workflow"
             note="OpenFEA · independent step counts"
+            na={notApplicable(app, ["openfea"])}
           >
-            {includes(app, "openfea") ? (
-              <>
-                <Columns items={steps} tone="fea" />
-                <div className="panel-foot">
-                  <span className="muted small">
-                    Solver backend ·{" "}
-                    {number(backends.reduce((n, v) => n + v, 0))} runs
-                  </span>
-                  <StackBar
-                    label="Solver backend"
-                    segments={[
-                      { name: "CPU", value: backends[0] ?? 0, tone: "fea" },
-                      { name: "WebGPU", value: backends[1] ?? 0, tone: "accent" },
-                      { name: "Unknown", value: backends[2] ?? 0, tone: "tone-3" },
-                    ]}
-                  />
-                </div>
-              </>
-            ) : (
-              <p className="empty">Simulation steps exist for OpenFEA only.</p>
-            )}
+            <Columns items={steps} tone="fea" />
+            <div className="panel-foot">
+              <span className="muted small">
+                Solver backend ·{" "}
+                {number(backends.reduce((n, v) => n + v, 0))} runs
+              </span>
+              <StackBar
+                label="Solver backend"
+                segments={[
+                  { name: "CPU", value: backends[0] ?? 0, tone: "fea" },
+                  { name: "WebGPU", value: backends[1] ?? 0, tone: "accent" },
+                  { name: "Unknown", value: backends[2] ?? 0, tone: "tone-3" },
+                ]}
+              />
+            </div>
           </Panel>
           <Panel
             level={3}
             title="Model complexity"
             note={`Parts per saved model · ${number(parts.reduce((n, v) => n + v, 0))} saves`}
+            na={notApplicable(app, EXPANDED_APPS)}
           >
             <Columns
               show="share"
@@ -389,7 +397,7 @@ function rate(failed: number, completed: number) {
 function EventTable({ rows }: { rows: Row[] }) {
   const values = grouped(rows, () => true);
   return (
-    <div className="table-scroll" role="region" aria-label="All opt-in event buckets" tabIndex={0}>
+    <TableScroll label="All opt-in event buckets" className="wide">
       <table>
         <thead>
           <tr>
@@ -420,7 +428,7 @@ function EventTable({ rows }: { rows: Row[] }) {
           )}
         </tbody>
       </table>
-    </div>
+    </TableScroll>
   );
 }
 export function Issues({
@@ -446,6 +454,18 @@ export function Issues({
   const serverDaily = dailyTotals(data.basic, "api_error"),
     codeDaily = dailyTotals(data.optional, isErrorCode);
   const maxCode = Math.max(1, ...codes.map((c) => c.count));
+  const timings = latencyRows
+    .filter(([, , , only]) => !only || includes(app, only))
+    .map(([name, level, event]) => {
+      const values = bucketCounts(level === "basic" ? basic : rows, event, level === "basic" ? BUCKETS : TIMINGS);
+      return {
+        name,
+        event,
+        values,
+        sum: values.reduce((n, v) => n + v, 0),
+        slow: (values[3] ?? 0) + (values[4] ?? 0),
+      };
+    });
   return (
     <>
       <section className="strip" aria-label="Issue summary">
@@ -533,15 +553,16 @@ export function Issues({
           title="Diagnostic codes"
           note="Opted-in users · fixed codes, never error text"
           className="wide"
+          na={notApplicable(app, EXPANDED_APPS)}
         >
-          <div className="table-scroll" role="region" aria-label="Diagnostic codes" tabIndex={0}>
+          <TableScroll label="Diagnostic codes">
             <table>
               <thead>
                 <tr>
                   <th>Where it failed</th>
                   <th>Apps</th>
-                  <th className="share-col">Share</th>
                   <th className="numeric">Count</th>
+                  <th className="share-col">Share</th>
                 </tr>
               </thead>
               <tbody>
@@ -550,12 +571,13 @@ export function Issues({
                     <tr key={c.event}>
                       <td title={c.event}>{label(diagnosticLabels, c.event)}</td>
                       <td className="muted">{c.apps.map(appName).join(" · ")}</td>
+                      <td className="numeric">{number(c.count)}</td>
                       <td>
                         <span className="track">
                           <i style={{ width: `${(c.count / maxCode) * 100}%`, background: "var(--warn)" }} />
                         </span>
+                        <span className="sr-only">{percent(c.count, codeTotal)}</span>
                       </td>
-                      <td className="numeric">{number(c.count)}</td>
                     </tr>
                   ))
                 ) : (
@@ -567,57 +589,76 @@ export function Issues({
                 )}
               </tbody>
             </table>
-          </div>
+          </TableScroll>
         </Panel>
-        <Panel title="Cloud request failures" note="OpenZCAD · by status" className="narrow">
-          {includes(app, "openzcad") ? (
-            <RankBars
-              tone="error"
-              items={statuses}
-              empty="No failed cloud requests in this range."
-            />
-          ) : (
-            <p className="empty">Cloud status exists for OpenZCAD only.</p>
-          )}
+        <Panel
+          title="Cloud request failures"
+          note="OpenZCAD · by status"
+          className="narrow"
+          na={notApplicable(app, ["openzcad"])}
+        >
+          <RankBars
+            tone="error"
+            items={statuses}
+            empty="No failed cloud requests in this range."
+          />
         </Panel>
       </div>
 
       <Panel
         title="Slow operations"
         note={
-          <ul className="legend" aria-hidden="true">
-            {timingLabels.map((name, i) => (
-              <li key={name}>
-                <span className="swatch" style={{ background: `var(--${timingTones[i]})` }} />
-                {name}
-              </li>
-            ))}
-          </ul>
+          <Legend
+            label="Timing ranges"
+            items={timingLabels.map((name, i) => ({ name, tone: timingTones[i]! }))}
+          />
         }
         className="slow"
       >
         <ul className="slow-list">
-          {latencyRows.map(([name, level, event, only]) => {
-            const values = bucketCounts(level === "basic" ? basic : rows, event, level === "basic" ? BUCKETS : TIMINGS),
-              sum = values.reduce((n, v) => n + v, 0),
-              slow = (values[3] ?? 0) + (values[4] ?? 0);
-            if (only && !includes(app, only)) return null;
-            return (
-              <li key={event}>
-                <span>{name}</span>
-                <StackBar
-                  legend={false}
-                  label={`${name} timing`}
-                  segments={values.map((value, i) => ({ name: timingLabels[i]!, value, tone: timingTones[i]! }))}
-                />
-                <span className="slow-share">
-                  <span className="numeric">{sum ? percent(slow, sum) : "—"}</span>{" "}
-                  <span className="muted small">≥10 s</span>
-                </span>
-              </li>
-            );
-          })}
+          {timings.map(({ name, event, values, sum, slow }) => (
+            <li key={event}>
+              <span>{name}</span>
+              <StackBar
+                legend={false}
+                label={`${name} timing`}
+                segments={values.map((value, i) => ({ name: timingLabels[i]!, value, tone: timingTones[i]! }))}
+              />
+              <span className="slow-share">
+                <span className="numeric">{sum ? percent(slow, sum) : "—"}</span>{" "}
+                <span className="muted small">≥10 s</span>
+              </span>
+            </li>
+          ))}
         </ul>
+        <DataTable label="Slow operations">
+          <table>
+            <thead>
+              <tr>
+                <th>Operation</th>
+                {timingLabels.map((name) => (
+                  <th key={name} className="numeric">
+                    {name}
+                  </th>
+                ))}
+                <th className="numeric">≥10 s share</th>
+              </tr>
+            </thead>
+            <tbody>
+              {timings.map(({ name, event, values, sum, slow }) => (
+                <tr key={event}>
+                  <td>{name}</td>
+                  {values.map((value, i) => (
+                    <td key={i} className="numeric">
+                      {number(value)}
+                    </td>
+                  ))}
+                  <td className="numeric">{sum ? percent(slow, sum) : "—"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </DataTable>
         <p className="panel-note">
           Counts are operations in coarse ranges. No exact timings or percentiles are inferred.
         </p>
@@ -648,6 +689,16 @@ export function Storage({ data, app }: { data: Loaded; app: string }) {
       value,
       tone: sizeTones[i]!,
     }));
+  const observations = (
+    [
+      ["Saved projects", "project_size"],
+      ["Uploads", "transfer_upload"],
+      ["Downloads", "transfer_download"],
+    ] as const
+  ).map(([name, event]) => {
+    const segments = observed(event);
+    return { name, event, segments, sum: segments.reduce((n, s) => n + s.value, 0) };
+  });
   const saves = bucketCounts(rows, "save_latency", TIMINGS),
     saveTotal = saves.reduce((n, v) => n + v, 0);
   return (
@@ -660,8 +711,9 @@ export function Storage({ data, app }: { data: Loaded; app: string }) {
               <strong className="hero-value">{bytes(latest.storedBytes)}</strong>
               <span className="muted small">
                 {first && history.length > 1
-                  ? `${latest.storedBytes >= first.storedBytes ? "+" : "−"}${bytes(Math.abs(latest.storedBytes - first.storedBytes))} since ${shortDay(first.day)} · snapshot ${latest.day} UTC`
-                  : `Snapshot ${latest.day} UTC`}
+                  ? `${signed(latest.storedBytes - first.storedBytes, bytes)} since ${shortDay(first.day)} · snapshot `
+                  : "Snapshot "}
+                <span className="nowrap">{latest.day} UTC</span>
               </span>
             </div>
             <dl className="hero-stats">
@@ -696,13 +748,15 @@ export function Storage({ data, app }: { data: Loaded; app: string }) {
           <div className="hero-chart">
             <div className="chart-title">
               <h2>Storage over time</h2>
-              <ul className="legend" aria-hidden="true">
-                <li><span className="swatch" style={{ background: "var(--accent)" }} />Stored</li>
-                <li><span className="swatch dashed" style={{ background: "var(--fea)" }} />Project data</li>
-              </ul>
+              <Legend
+                items={[
+                  { name: "Stored", tone: "accent" },
+                  { name: "Project data", tone: "fea", dashed: true },
+                ]}
+              />
             </div>
             <LineChart
-              label="Stored bytes and project data"
+              label="Stored and project data over time"
               days={history.map((c) => c.day)}
               series={[
                 { name: "Stored", values: history.map((c) => c.storedBytes), tone: "accent" },
@@ -719,7 +773,9 @@ export function Storage({ data, app }: { data: Loaded; app: string }) {
         <p className="notice">
           {cloud
             ? "No OpenZCAD cloud snapshot received in this range."
-            : "Cloud storage snapshots exist for OpenZCAD only. Opt-in size observations below include the selected app."}
+            : notApplicable(app, EXPANDED_APPS)
+              ? `Storage data exists for OpenZCAD and OpenFEA only; none applies to ${appName(app)}.`
+              : "Cloud storage snapshots exist for OpenZCAD only. Opt-in size observations below include the selected app."}
         </p>
       )}
 
@@ -727,6 +783,7 @@ export function Storage({ data, app }: { data: Loaded; app: string }) {
         <Panel
           title="Project sizes"
           note={latest ? `${number(latest.projects)} cloud projects · latest snapshot` : "Latest snapshot"}
+          na={notApplicable(app, ["openzcad"])}
         >
           {latest ? (
             <Columns
@@ -743,27 +800,54 @@ export function Storage({ data, app }: { data: Loaded; app: string }) {
             Current document bytes per OpenZCAD project. External assets are excluded.
           </p>
         </Panel>
-        <Panel title="Size observations" note={<OptIn />}>
+        <Panel
+          title="Size observations"
+          note={<OptIn />}
+          na={notApplicable(app, EXPANDED_APPS)}
+        >
+          <Legend
+            label="Size ranges"
+            items={sizeLabels.map((name, i) => ({ name, tone: sizeTones[i]! }))}
+          />
           <div className="stack-group">
-            {(
-              [
-                ["Saved projects", "project_size"],
-                ["Uploads", "transfer_upload"],
-                ["Downloads", "transfer_download"],
-              ] as const
-            ).map(([name, event]) => {
-              const segments = observed(event);
-              return (
-                <div key={event}>
-                  <div className="chart-title">
-                    <span>{name}</span>
-                    <span className="numeric">{number(segments.reduce((n, s) => n + s.value, 0))}</span>
-                  </div>
-                  <StackBar label={name} segments={segments} legend={event === "transfer_download"} />
+            {observations.map(({ name, event, segments, sum }) => (
+              <div key={event}>
+                <div className="chart-title">
+                  <span>{name}</span>
+                  <span className="numeric">{number(sum)}</span>
                 </div>
-              );
-            })}
+                <StackBar label={name} segments={segments} legend={false} />
+              </div>
+            ))}
           </div>
+          <DataTable label="Size observations">
+            <table>
+              <thead>
+                <tr>
+                  <th>Operation</th>
+                  {sizeLabels.map((name) => (
+                    <th key={name} className="numeric">
+                      {name}
+                    </th>
+                  ))}
+                  <th className="numeric">Total</th>
+                </tr>
+              </thead>
+              <tbody>
+                {observations.map(({ name, event, segments, sum }) => (
+                  <tr key={event}>
+                    <td>{name}</td>
+                    {segments.map((s) => (
+                      <td key={s.name} className="numeric">
+                        {number(s.value)}
+                      </td>
+                    ))}
+                    <td className="numeric">{number(sum)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </DataTable>
           <div className="panel-foot inline">
             <span className="muted">Cloud saves under 1 s</span>
             <span className="numeric">
@@ -776,8 +860,12 @@ export function Storage({ data, app }: { data: Loaded; app: string }) {
         </Panel>
       </div>
 
-      <Panel title="Snapshot history" note="Daily · latest first">
-        <div className="table-scroll tall" role="region" aria-label="Snapshot history" tabIndex={0}>
+      <Panel
+        title="Snapshot history"
+        note="Daily · latest first"
+        na={notApplicable(app, ["openzcad"])}
+      >
+        <TableScroll label="Snapshot history" className="tall wide">
           <table>
             <thead>
               <tr>
@@ -793,7 +881,7 @@ export function Storage({ data, app }: { data: Loaded; app: string }) {
               {history.length ? (
                 [...history].reverse().map((c) => (
                   <tr key={c.day}>
-                    <td>{c.day}</td>
+                    <td className="nowrap">{c.day}</td>
                     <td className="numeric">{number(c.accounts)}</td>
                     <td className="numeric">{number(c.projects)}</td>
                     <td className="numeric">{number(c.revisions)}</td>
@@ -810,7 +898,7 @@ export function Storage({ data, app }: { data: Loaded; app: string }) {
               )}
             </tbody>
           </table>
-        </div>
+        </TableScroll>
         <p className="panel-note">
           Consenting accounts only. Owned projects including trash; stored R2 metadata plus D1
           documents without R2 pointers. Excludes database overhead and backups. Not billable disk
