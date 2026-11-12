@@ -149,11 +149,14 @@ export function cloudflareDemo(now = new Date()): CloudflareData {
         },
       );
     });
-    for (const [family, description, quantity, cost] of [
-      ["Workers", "Workers Standard requests", requests, 400000],
-      ["Workers", "Workers Standard CPU time", cpu, 680000],
-      ["D1", "D1 Rows Written", writes, 1200000],
-      ["R2", "R2 Storage", 12, 320000],
+    // Billing quantities use Cloudflare's units: CPU time in milliseconds and
+    // storage in GB-months (12 GB held for a day ≈ 0.4 GB-month); other rows
+    // carry the generic "Count" unit, as the collector stores them.
+    for (const [family, description, quantity, unit, cost] of [
+      ["Workers", "Workers Standard requests", requests, "Count", 400000],
+      ["Workers", "Workers Standard CPU time", cpu / 1000, "Count", 680000],
+      ["D1", "D1 Rows Written", writes, "Count", 1200000],
+      ["R2", "R2 Storage", 0.4, "GB-month", 320000],
     ] as const)
       data.charges.push({
         id: `sample-${day}-${description}`,
@@ -167,7 +170,7 @@ export function cloudflareDemo(now = new Date()): CloudflareData {
         quantity,
         cost,
         currency: "USD",
-        unit: "Count",
+        unit,
       });
     data.usage.push({
       day,
