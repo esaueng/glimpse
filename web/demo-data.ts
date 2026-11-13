@@ -4,9 +4,17 @@ import {
   SIZES,
   PARTS,
   TIMINGS,
+  thresholdActivity,
   type CensusRow,
 } from "../src/expanded";
 import type { Range, Stats } from "./data";
+
+const diagnosticBase: Record<string, number> = {
+  error_import: 4,
+  error_unresponsive: 3,
+  error_gpu_lost: 1,
+  error_out_of_memory: 1,
+};
 
 // Entirely fictional, deterministic counts. No network, storage, or production imports.
 export function demoStats(range: Range, now = new Date()): Stats {
@@ -84,7 +92,7 @@ export function demoStats(range: Range, now = new Date()): Stats {
       );
       for (const [event, buckets] of Object.entries(EXPANDED)) {
         if (event.startsWith("error_"))
-          add(event, "none", event === "error_import" ? 4 : 2);
+          add(event, "none", diagnosticBase[event] ?? 2);
         if (
           [
             "feature_operation",
@@ -107,21 +115,28 @@ export function demoStats(range: Range, now = new Date()): Stats {
         mib1to10 = 164 + growth,
         mib10to100 = 57,
         gte100mib = 12;
-      census.push({
-        day,
-        app: "openzcad",
-        generation: time,
-        accounts: 84 + Math.floor(growth / 3),
-        projects: lt1mib + mib1to10 + mib10to100 + gte100mib,
-        revisions: 2400 + growth * 12,
-        storedBytes: 8_300_000_000 + growth * 18_000_000,
-        logicalBytes: 6_700_000_000 + growth * 12_000_000,
-        unknownArtifacts: 3,
-        lt1mib,
-        mib1to10,
-        mib10to100,
-        gte100mib,
-      });
+      // Activity counts pass through the same k-threshold as live data, so the demo's
+      // three idle accounts show as withheld rather than as a small number.
+      census.push(
+        thresholdActivity({
+          day,
+          app: "openzcad",
+          generation: time,
+          accounts: 84 + Math.floor(growth / 3),
+          projects: lt1mib + mib1to10 + mib10to100 + gte100mib,
+          revisions: 2400 + growth * 12,
+          storedBytes: 8_300_000_000 + growth * 18_000_000,
+          logicalBytes: 6_700_000_000 + growth * 12_000_000,
+          unknownArtifacts: 3,
+          lt1mib,
+          mib1to10,
+          mib10to100,
+          gte100mib,
+          active7d: 27 + Math.floor(growth / 6),
+          active30d: 49 + Math.floor(growth / 4),
+          idle90d: 3,
+        }),
+      );
     }
   }
   return {

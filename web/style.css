@@ -1144,6 +1144,21 @@ main {
   display: flex;
   flex-direction: column;
 }
+/* Account activity: three cells that stretch, one column on narrow panels. */
+.activity-grid {
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+}
+/* Withheld and not-collected values, in the muted "Not collected" tile style. */
+.gap-value {
+  color: #6d7f9c;
+  font-size: calc(15 * var(--text-px));
+  line-height: 1.6;
+}
+.cell-hint {
+  display: block;
+  font-size: calc(12 * var(--text-px));
+  color: var(--muted);
+}
 
 /* Issues */
 .slow-list {

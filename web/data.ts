@@ -1,12 +1,30 @@
 import { APPS, APP_NAMES, type App, type Row } from "../src/contract";
-import type { CensusRow } from "../src/expanded";
+import { withheld, type ActivityField, type CensusRow } from "../src/expanded";
 export type Range = { app: string; level: string; from: string; to: string };
 export type Stats = {
   range: Range;
   rows: Row[];
   census: CensusRow[];
+  /** Optional-schema migrations not yet applied (never blocking), e.g. 0005_census_activity.sql. */
+  pendingMigrations?: string[];
   receivedAt: string;
 };
+export type ActivityDisplay =
+  | { state: "value"; value: number }
+  | { state: "withheld" }
+  | { state: "not-collected" };
+/**
+ * One activity count from the latest snapshot. A missing key is "Not collected" (an older
+ * OpenZCAD, or migration 0005 pending); null is "Withheld" by the k-threshold. A number
+ * is re-checked against the threshold here as well, so a small value is never shown.
+ */
+export function activityValue(row: CensusRow, key: ActivityField): ActivityDisplay {
+  if (!Object.hasOwn(row, key)) return { state: "not-collected" };
+  const value = row[key];
+  return typeof value === "number" && !withheld(value, row.accounts)
+    ? { state: "value", value }
+    : { state: "withheld" };
+}
 export const appName = (app: string) =>
   APPS.includes(app as App) ? APP_NAMES[app as App] : "All apps";
 // Formatters are created once; number() runs for every table cell and tick.

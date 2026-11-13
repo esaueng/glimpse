@@ -58,6 +58,10 @@ describe("custom range validation", () => {
 describe("readable labels and formats", () => {
   it("names report codes and buckets", () => {
     expect(eventLabel("error_mesh")).toBe("Mesh error");
+    expect(eventLabel("error_unresponsive")).toBe("Page unresponsive (5 s or more)");
+    expect(eventLabel("error_gpu_lost")).toBe("GPU device lost");
+    expect(eventLabel("error_out_of_memory")).toBe("Out of memory");
+    expect(eventLabel("error_worker")).toBe("Background worker error");
     expect(eventLabel("mesh_latency")).toBe("Meshing time");
     expect(bucketLabel("mesh_latency", "1s_10s")).toBe("1–10 s");
     expect(bucketLabel("project_size", "gte_100mib")).toBe("≥100 MiB");

@@ -7,6 +7,7 @@ import { describe, expect, it } from "vitest";
 import { LineChart, shortDay } from "../web/charts";
 import { Panel, Tile } from "../web/ui";
 import { CoverageTable } from "../web/cloudflare/tables";
+import { AccountActivity } from "../web/views";
 import { RETENTION_SOURCE } from "../src/cloudflare/model";
 
 const html = (node: ReactElement) => renderToStaticMarkup(node);
@@ -66,6 +67,52 @@ describe("Panel", () => {
     expect(out).toContain("<h3>CAD operations</h3>");
     expect(out).toContain('<strong class="na">N/A</strong> · OpenZCAD only');
     expect(out).not.toContain("chart");
+  });
+});
+
+describe("AccountActivity", () => {
+  const row = {
+    day: "2026-11-12",
+    app: "openzcad",
+    generation: 9,
+    accounts: 80,
+    projects: 0,
+    revisions: 0,
+    storedBytes: 0,
+    logicalBytes: 0,
+    unknownArtifacts: 0,
+    lt1mib: 0,
+    mib1to10: 0,
+    mib10to100: 0,
+    gte100mib: 0,
+  } as const;
+
+  it("shows counts with their share, and withheld counts as withheld", () => {
+    const out = html(
+      <AccountActivity row={{ ...row, active7d: 20, active30d: 44, idle90d: null }} />,
+    );
+    expect(out).toContain("Saved in the last 7 days");
+    expect(out).toContain('<span class="numeric big">20</span>');
+    expect(out).toContain("25.0% of accounts");
+    expect(out).toContain('<span class="gap-value">Withheld (fewer than 5)</span>');
+    expect(out).not.toContain("Not collected");
+    expect(out).not.toContain("—");
+  });
+
+  it("never shows a small stored value, even if one reaches the browser", () => {
+    const out = html(
+      <AccountActivity row={{ ...row, active7d: 3, active30d: 77, idle90d: 0 }} />,
+    );
+    expect(out.match(/Withheld \(fewer than 5\)/g)).toHaveLength(3);
+    expect(out).not.toContain('<span class="numeric big">');
+  });
+
+  it("marks fields absent from the snapshot as not collected, naming a pending migration", () => {
+    expect(html(<AccountActivity row={row} />).match(/Not collected/g)).toHaveLength(3);
+    expect(html(<AccountActivity row={row} />)).toContain("Not sent by OpenZCAD");
+    expect(html(<AccountActivity row={row} pending />)).toContain(
+      "Glimpse migration 0005 not applied",
+    );
   });
 });
 

@@ -2,16 +2,29 @@
 // hand, so code can reach an environment before its schema. Authenticated API surfaces
 // check Wrangler's migration ledger and fail with a clear 503 instead of a vague error.
 // Ingestion RPC is deliberately not guarded: its behaviour is unchanged.
+//
+// Two kinds of surface:
+// - Blocking ("stats", "cloudflare"): the API returns the 503 until every migration listed
+//   for it is applied.
+// - Optional ("census_activity"): an additive schema that a blocking surface uses only when
+//   present. A missing optional migration never blocks; /api/stats keeps serving existing
+//   analytics and reports it in `pendingMigrations`, and the dashboard shows the affected
+//   fields as not collected. Ingestion falls back to the older columns (src/index.ts).
 
-export type Surface = "stats" | "cloudflare";
+export type Surface = "stats" | "cloudflare" | "census_activity";
+export const OPTIONAL_SURFACES = [
+  "census_activity",
+] as const satisfies readonly Surface[];
 
 // Every file in migrations/ must be listed here, mapped to the API surfaces whose schema
 // depends on it; test/migrations.test.ts fails when a migration is added without this.
+// A migration listed only under an optional surface must be additive (nullable columns).
 export const REQUIRED_MIGRATIONS = {
   "0001_aggregates.sql": ["stats"],
   "0002_openlattice3d.sql": ["stats"],
   "0003_census.sql": ["stats"],
   "0004_cloudflare.sql": ["cloudflare"],
+  "0005_census_activity.sql": ["census_activity"],
 } as const satisfies Record<string, readonly Surface[]>;
 
 // Wrangler's default ledger table (wrangler.jsonc sets no `migrations_table`).

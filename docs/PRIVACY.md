@@ -11,6 +11,8 @@ or change any application's consent controls.
 
 Reviewed 15 October 2026. This records a technical approach and its limits; it is not a blanket legal exemption or a production compliance certification.
 
+**Draft addition, 12 November 2026.** The [draft review of additional diagnostic codes and account activity](#draft-review-additional-diagnostic-codes-and-account-activity) at the end of this page is **Draft — pending owner approval**. It is not covered by the 15 October review, and nothing it describes is collected.
+
 **Review pending.** The infrastructure-monitor paragraph above was added on 24 October 2026 with the Cloudflare page (#26), after the last full review. It has not been through that review. Open questions include the 400-day retention of `cf_*` history, which is longer than the 90-day analytics retention, and the dashboard's write path for budgets and manual app mappings (`POST /api/cloudflare/settings`, behind Access). The review is tracked in the [roadmap](ROADMAP.md#open-rollout-and-verification-items).
 
 ## Two distinct purposes
@@ -65,3 +67,94 @@ withdrawal must be easy; see [GDPR Article 7(3)](https://eur-lex.europa.eu/eli/r
 Jurisdiction, audience (including children), notices, lawful basis, provider logs,
 backup retention and deployment-specific configuration still need review before
 activation. Technical tests cannot certify legal compliance or anonymity.
+
+## Draft review: additional diagnostic codes and account activity
+
+**Draft — pending owner approval.** Written 12 November 2026 for roadmap feature
+candidates 1 and 2 ([roadmap](ROADMAP.md#feature-candidates)). It is not part of
+the 15 October 2026 review above and has not been approved. Glimpse is prepared
+to accept the values below, but **nothing is collected**: OpenZCAD and OpenFEA
+send them only after their own adapter changes, which are not made, and those
+should wait for approval. Until then no new diagnostic code appears and the
+dashboard shows the activity counts as "Not collected".
+
+### Additional diagnostic codes
+
+| Code | Meaning (decided by the app, never sent as text) |
+| --- | --- |
+| `error_unresponsive` | The page's main thread was blocked for 5 seconds or more |
+| `error_gpu_lost` | The WebGPU or WebGL device or context was lost |
+| `error_out_of_memory` | An allocation failed or the browser signalled out of memory |
+| `error_worker` | A Web Worker failed or stopped unexpectedly |
+
+- **Shape:** the same as the existing `DIAGNOSTICS` codes in
+  [`src/expanded.ts`](../src/expanded.ts): Optional level, bucket `none`, one
+  count per UTC day, app and code. OpenZCAD and OpenFEA only; OpenLattice3D and
+  unknown codes are rejected (see [ADR 0001](decisions/0001-openlattice3d-v2-parity.md)).
+  Local reports accept them under the same rules.
+- **Never sent:** error messages, stacks, URLs, GPU, driver or adapter names,
+  memory sizes, worker script names, durations, or any timestamp. The 5-second
+  threshold is applied in the app; the actual duration stays there.
+- **Consent:** after the existing v2 opt-in only. They fall within the v2
+  description "fixed codes at explicit failure sites"; the owner should confirm
+  that the app notices need no wording change. No consent-version change is
+  proposed.
+- **Risks:** as for the existing codes. One failure can produce several codes,
+  custom clients can spoof them, and a day with a count of one shows that one
+  opted-in browser hit that failure that day, without saying which. GPU loss and
+  memory failures correlate with hardware, but no hardware detail is sent, so a
+  daily count cannot single out a device.
+- **Retention:** identical to existing data: `daily_counts` rows for 90 UTC
+  calendar days, removed by the daily cron and excluded from reads after that.
+  No migration.
+
+### Account activity counts (OpenZCAD census)
+
+| Field | Meaning |
+| --- | --- |
+| `active7d` | Consenting accounts with a project save in the last 7 days |
+| `active30d` | Consenting accounts with a project save in the last 30 days |
+| `idle90d` | Consenting accounts with no project save for 90 days or more |
+
+- **Shape:** three integers added to OpenZCAD's existing aggregate snapshot,
+  computed inside OpenZCAD over accounts with an unexpired account-statistics
+  permission. All three are sent together or not at all, so older OpenZCAD
+  versions keep working. Each must be a non-negative integer no larger than
+  `accounts`, with `active7d` ≤ `active30d` and `active30d` + `idle90d` ≤
+  `accounts`; otherwise the whole snapshot is rejected. The app may send `null`
+  for a field it already withholds. Glimpse never receives account IDs,
+  last-save dates or per-account rows.
+- **k-threshold (K = 5, `ACTIVITY_MIN_COUNT`):** a count is withheld when it is
+  below 5, or when fewer than 5 consenting accounts fall outside it (that
+  complement is `accounts` minus the count, so it would be just as revealing).
+  With fewer than 10 consenting accounts every count is withheld. Glimpse applies
+  the rule at ingest and stores a withheld count as `NULL`, never the raw value;
+  migration `0005` also rejects any stored count below 5. The rule is applied
+  again when `/api/stats` reads rows and in the dashboard, which shows
+  "Withheld (fewer than 5)". The OpenZCAD adapter should apply the same rule
+  before sending, so small raw values never leave OpenZCAD.
+- **Residual risk:** a threshold does not stop differencing. If `active7d` moves
+  from 12 to 13 between two days, one consenting account saved in that window.
+  Glimpse keeps only the latest snapshot per UTC day, access is owner-only behind
+  Cloudflare Access, and rows expire after 90 days, but the owner should decide
+  whether that is acceptable or whether counts should also be rounded (for
+  example to the nearest 5) before approval.
+- **Consent:** the separate OpenZCAD account-statistics permission currently
+  describes numeric account and storage totals. Whether save activity is within
+  that wording, or the permission text and version must change, is an owner
+  decision to make before the adapter ships.
+- **Retention:** identical to existing data: the latest snapshot per UTC day in
+  `daily_census` for 90 UTC calendar days, removed by the daily cron and
+  excluded from reads after that.
+- **Schema:** migration `0005_census_activity.sql` adds nullable columns only.
+  It is optional for the pending-migration guard: until it is applied,
+  `/api/stats` serves everything else and snapshots are stored without activity
+  counts.
+
+### Before collection starts
+
+1. The owner approves or amends this section, records the date, and removes
+   the draft marker.
+2. OpenZCAD and OpenFEA adapter PRs send the codes; the OpenZCAD adapter sends
+   the activity counts, with its account-permission text reviewed.
+3. Migration `0005` is applied to Preview and Production under authorization.
