@@ -688,7 +688,7 @@ it("rejects late snapshots across UTC days and purges expired snapshot metadata"
   ).toEqual({ n: 0 });
 });
 
-// Draft — pending owner approval (docs/PRIVACY.md, "Draft review").
+// Privacy review approved 13 Nov 2026 (docs/PRIVACY.md, "Review: additional diagnostic codes and account activity").
 const NEW_CODES = [
   "error_unresponsive",
   "error_gpu_lost",
