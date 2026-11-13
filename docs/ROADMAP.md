@@ -36,6 +36,11 @@ Rules for this page:
 Each item needs a recorded result in [VALIDATION.md](VALIDATION.md) before it
 moves to the table above. Owners are unassigned until someone takes the item.
 
+Items that need Cloudflare account access, including applying migrations `0004`
+and `0005` before esaueng/glimpse#32 is merged, were deferred by the owner on
+13 November 2026 and stay with the owner. No Cloudflare credential is stored for
+automated sessions.
+
 | # | Item | Method | Pass criterion | Owner | Account authorization |
 | --- | --- | --- | --- | --- | --- |
 | 1 | Cloudflare monitor state | Check the remote D1 migration ledger for `0004_cloudflare.sql` on Preview and Production; list Production Worker secrets by name only; read `cf_coverage` after a `17 * * * *` run; open the Cloudflare page | `0004` applied on both databases; `CF_ACCOUNT_ID` and `CF_API_TOKEN` present on Production only; at least one scheduled run recorded, with `cf_coverage.last_success` set for each source; billing totals match Cloudflare's own view; private apps classified; account budget set. The collector is skipped until both secrets exist (`configured` in `src/cloudflare/store.ts`), so a quiet page alone does not show failure | unassigned | Yes: migration, secrets, read of production tables |
