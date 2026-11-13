@@ -35,16 +35,21 @@ Pages:
   account-activity row from the latest snapshot (saved in the last 7 and 30 days,
   no save for 90 days or more, each with its share of accounts), activity by app with each app's
   main outputs and its share of API requests, top CAD operations, feature
-  categories, OpenFEA workflow steps and solver backend, and part-count ranges.
+  categories (only those an app in scope can send), OpenFEA workflow steps and
+  solver backend, and model complexity: part-count ranges (OpenZCAD and OpenFEA)
+  and lattice cell-count ranges (OpenLattice3D), each with an N/A row when the
+  filter excludes its apps.
 - Issues: a six-cell stat strip of server errors with error rate, diagnostic codes, failed exports,
   solver runs and generations with failure rates, cloud request failures.
-  Daily server-error and diagnostic charts, ranked diagnostic codes, cloud
-  status ranking, slow-operation share (10 s or more) per timing event, the
+  Daily server-error and diagnostic charts, ranked diagnostic codes (all three
+  apps), cloud status ranking, slow-operation share (10 s or more) per timing
+  event (rows an app filter excludes are omitted), the
   local report inspector, and a collapsed table of every opt-in bucket.
 - Storage: stored bytes with change in range, project data, storage overhead,
   per-project and per-account averages, revisions and unknown-size artifacts;
   stored and project data over time; snapshot project-size ranges; saved,
-  upload and download size observations; cloud saves under 1 s; daily snapshot
+  upload and download size observations (OpenLattice3D: saved only, with an N/A
+  row for transfers and cloud saves); cloud saves under 1 s; daily snapshot
   history in a scrolling table.
 - Cloudflare: Esau infrastructure usage and costs, separate from application
   analytics and read from the private `cf_*` tables (see
@@ -78,7 +83,9 @@ bars carry text values or an accessible label. No hover-only values, live
 animation or polling. Failed refresh keeps prior results and marks them stale.
 
 Empty, unavailable and unsupported stay distinct: "—" for not yet received,
-"N/A" with the owning app named when the filter excludes it, and "Not collected"
+"N/A" with the owning app named when the filter excludes it (owners follow the
+per-app allowlist in `src/expanded.ts`; a panel with several measures shows an
+N/A row for each excluded one, after those that apply), and "Not collected"
 for metrics Glimpse does not record, or that the snapshot did not carry (the note
 says whether OpenZCAD did not send it or migration 0005 is pending). A count held
 back by the k-threshold shows "Withheld (fewer than 5)", never a number.

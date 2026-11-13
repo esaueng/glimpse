@@ -1,7 +1,9 @@
 import { APPS, BUCKETS, type App, type Row } from "../src/contract";
 import {
   ACTIVITY_MIN_COUNT,
+  CELLS,
   EXPANDED,
+  expandedMetric,
   PARTS,
   SIZES,
   TIMINGS,
@@ -41,6 +43,7 @@ import {
 } from "./data";
 import {
   capitalize,
+  cellLabels,
   cloudStatusLabels,
   diagnosticHints,
   diagnosticLabels,
@@ -63,8 +66,25 @@ const notApplicable = (scope: string, owners: App[]) =>
   owners.some((a) => includes(scope, a))
     ? undefined
     : `${owners.map(appName).join(" and ")} only`;
-// Opt-in detail (operations, categories, sizes, diagnostics) exists for these apps.
-const EXPANDED_APPS: App[] = ["openzcad", "openfea"];
+/**
+ * Apps whose contract accepts an expanded event (src/expanded.ts), so N/A follows the
+ * allowlist instead of a copy of it. OpenLattice3D has its own subset (ADR 0001).
+ */
+const owners = (event: string): App[] =>
+  APPS.filter((a) =>
+    (EXPANDED[event] ?? []).some((bucket) => expandedMetric(event, bucket, a)),
+  );
+/** One N/A line inside a panel, for a measure the app filter excludes. */
+function NaRow({ title, na }: { title: string; na: string }) {
+  return (
+    <div className="panel-foot inline na-row">
+      <span className="muted small">{title}</span>
+      <span className="panel-meta">
+        <strong className="na">N/A</strong> · {na}
+      </span>
+    </div>
+  );
+}
 
 const OptIn = () => <span className="badge">Opted-in users</span>;
 
@@ -148,7 +168,14 @@ export function Overview({ data, app }: { data: Loaded; app: string }) {
     value: r.count,
     title: r.bucket,
   }));
-  const categories = EXPANDED.feature_category!.map((bucket) => ({
+  // Only categories an app in scope can send: OpenLattice3D has no edit, mesh or solve.
+  const categoryBuckets = EXPANDED.feature_category!.filter((bucket) =>
+      apps.some((a) => expandedMetric("feature_category", bucket, a)),
+    ),
+    missingCategories = EXPANDED.feature_category!.filter(
+      (bucket) => !categoryBuckets.includes(bucket),
+    );
+  const categories = categoryBuckets.map((bucket) => ({
     bucket,
     value: total(
       rows.filter((r) => r.bucket === bucket),
@@ -167,7 +194,31 @@ export function Overview({ data, app }: { data: Loaded; app: string }) {
     EXPANDED.solver_backend!,
     "openfea",
   );
-  const parts = bucketCounts(rows, "part_count", PARTS);
+  const complexity = [
+    {
+      key: "part_count",
+      title: "Parts per saved model",
+      unit: "saves",
+      labels: ["0 parts", "1", "2–10", "11–100", "101+"],
+      values: bucketCounts(rows, "part_count", PARTS),
+      tone: "accent" as Tone,
+      empty: "No part counts in this range.",
+    },
+    {
+      key: "lattice_cells",
+      title: "Unit cells per generated lattice",
+      unit: "lattices",
+      labels: CELLS.map((bucket) => cellLabels[bucket]),
+      values: bucketCounts(rows, "lattice_cells", CELLS),
+      tone: "lattice" as Tone,
+      // Accepted by Glimpse; OpenLattice3D sends cell counts only after its adapter ships.
+      empty:
+        "No lattice sizes in this range. OpenLattice3D sends them only after its analytics update.",
+    },
+  ]
+    .map((c) => ({ ...c, na: notApplicable(app, owners(c.key)) }))
+    // N/A rows follow the measures that apply, as collapsed panels do.
+    .sort((a, b) => Number(!!a.na) - Number(!!b.na));
   const outputs: Record<App, [string, string][]> = {
     openzcad: [
       ["feature_used", "features used"],
@@ -336,8 +387,7 @@ export function Overview({ data, app }: { data: Loaded; app: string }) {
           <Panel
             level={3}
             title="What people work on"
-            note="Feature categories · OpenZCAD and OpenFEA"
-            na={notApplicable(app, EXPANDED_APPS)}
+            note="Feature categories"
           >
             {categoryTotal ? (
               <ul className="category-grid">
@@ -353,6 +403,12 @@ export function Overview({ data, app }: { data: Loaded; app: string }) {
               </ul>
             ) : (
               <p className="empty">No feature categories in this range.</p>
+            )}
+            {missingCategories.length > 0 && (
+              <p className="panel-note">
+                {missingCategories.map(capitalize).join(", ")}: not sent by{" "}
+                {appName(app)}.
+              </p>
             )}
           </Panel>
           <Panel
@@ -380,15 +436,34 @@ export function Overview({ data, app }: { data: Loaded; app: string }) {
           <Panel
             level={3}
             title="Model complexity"
-            note={`Parts per saved model · ${number(parts.reduce((n, v) => n + v, 0))} saves`}
-            na={notApplicable(app, EXPANDED_APPS)}
+            note="Coarse ranges · share of observations"
           >
-            <Columns
-              show="share"
-              items={["0 parts", "1", "2–10", "11–100", "101+"].map(
-                (text, i) => ({ label: text, value: parts[i] ?? 0 }),
-              )}
-            />
+            {complexity.map((c, i) =>
+              c.na ? (
+                <NaRow key={c.key} title={c.title} na={c.na} />
+              ) : (
+                <div key={c.key} className={i ? "panel-foot" : "measure"}>
+                  <div className="chart-title">
+                    <span>{c.title}</span>
+                    <span>
+                      <span className="numeric">
+                        {number(c.values.reduce((n, v) => n + v, 0))}
+                      </span>{" "}
+                      {c.unit}
+                    </span>
+                  </div>
+                  <Columns
+                    show="share"
+                    tone={c.tone}
+                    empty={c.empty}
+                    items={c.labels.map((text, j) => ({
+                      label: text,
+                      value: c.values[j] ?? 0,
+                    }))}
+                  />
+                </div>
+              ),
+            )}
           </Panel>
         </div>
       </section>
@@ -396,12 +471,13 @@ export function Overview({ data, app }: { data: Loaded; app: string }) {
   );
 }
 
-const latencyRows: [string, "basic" | "optional", string, App?][] = [
+// The fourth entry, when present, lists the apps that send the event.
+const latencyRows: [string, "basic" | "optional", string, App[]?][] = [
   ["API requests", "basic", "api_latency"],
-  ["Cloud saves", "optional", "save_latency"],
+  ["Cloud saves", "optional", "save_latency", owners("save_latency")],
   ["Exports", "optional", "export_latency"],
-  ["Meshing · OpenFEA", "optional", "mesh_latency", "openfea"],
-  ["Solving · OpenFEA", "optional", "solver_latency", "openfea"],
+  ["Meshing · OpenFEA", "optional", "mesh_latency", owners("mesh_latency")],
+  ["Solving · OpenFEA", "optional", "solver_latency", owners("solver_latency")],
   ["In-app operations", "optional", "operation_latency"],
 ];
 function rate(failed: number, completed: number) {
@@ -470,7 +546,7 @@ export function Issues({
     codeDaily = dailyTotals(data.optional, isErrorCode);
   const maxCode = Math.max(1, ...codes.map((c) => c.count));
   const timings = latencyRows
-    .filter(([, , , only]) => !only || includes(app, only))
+    .filter(([, , , only]) => !only || !notApplicable(app, only))
     .map(([name, level, event]) => {
       const values = bucketCounts(level === "basic" ? basic : rows, event, level === "basic" ? BUCKETS : TIMINGS);
       return {
@@ -488,12 +564,12 @@ export function Issues({
           {percent(serverErrors, requests, 2)} of requests · all users
         </Tile>
         <Tile label="App diagnostics" value={number(codeTotal)}>
-          {APPS.filter((a) => includes(app, a) && a !== "openlattice3d")
+          {APPS.filter((a) => includes(app, a))
             .map(
               (a) =>
                 `${appName(a)} ${number(rows.reduce((n, r) => n + (isErrorCode(r) && r.app === a ? r.count : 0), 0))}`,
             )
-            .join(" · ") || "OpenZCAD and OpenFEA only"}
+            .join(" · ")}
         </Tile>
         <Tile label="Failed exports" value={number(total(rows, "export_failed"))}>
           {rate(total(rows, "export_failed"), total(rows, "export_completed"))}
@@ -568,7 +644,6 @@ export function Issues({
           title="Diagnostic codes"
           note="Opted-in users · fixed codes, never error text"
           className="wide"
-          na={notApplicable(app, EXPANDED_APPS)}
         >
           <TableScroll label="Diagnostic codes">
             <table>
@@ -686,7 +761,7 @@ export function Issues({
         </p>
       </Panel>
 
-      <ReportInspector demo={demo} />
+      <ReportInspector demo={demo} app={app} />
 
       <details className="panel more-panel">
         <summary>All opt-in event buckets</summary>
@@ -711,13 +786,17 @@ export function Storage({ data, app }: { data: Loaded; app: string }) {
       value,
       tone: sizeTones[i]!,
     }));
+  // Saved project sizes come from every app; transfers and cloud saves from OpenZCAD and OpenFEA.
+  const transfersNa = notApplicable(app, owners("transfer_upload"));
   const observations = (
     [
       ["Saved projects", "project_size"],
       ["Uploads", "transfer_upload"],
       ["Downloads", "transfer_download"],
     ] as const
-  ).map(([name, event]) => {
+  )
+    .filter(([, event]) => !notApplicable(app, owners(event)))
+    .map(([name, event]) => {
     const segments = observed(event);
     return { name, event, segments, sum: segments.reduce((n, s) => n + s.value, 0) };
   });
@@ -795,9 +874,7 @@ export function Storage({ data, app }: { data: Loaded; app: string }) {
         <p className="notice">
           {cloud
             ? "No OpenZCAD cloud snapshot received in this range."
-            : notApplicable(app, EXPANDED_APPS)
-              ? `Storage data exists for OpenZCAD and OpenFEA only; none applies to ${appName(app)}.`
-              : "Cloud storage snapshots exist for OpenZCAD only. Opt-in size observations below include the selected app."}
+            : "Cloud storage snapshots exist for OpenZCAD only. Opt-in size observations below include the selected app."}
         </p>
       )}
 
@@ -822,11 +899,7 @@ export function Storage({ data, app }: { data: Loaded; app: string }) {
             Current document bytes per OpenZCAD project. External assets are excluded.
           </p>
         </Panel>
-        <Panel
-          title="Size observations"
-          note={<OptIn />}
-          na={notApplicable(app, EXPANDED_APPS)}
-        >
+        <Panel title="Size observations" note={<OptIn />}>
           <Legend
             label="Size ranges"
             items={sizeLabels.map((name, i) => ({ name, tone: sizeTones[i]! }))}
@@ -870,12 +943,16 @@ export function Storage({ data, app }: { data: Loaded; app: string }) {
               </tbody>
             </table>
           </DataTable>
-          <div className="panel-foot inline">
-            <span className="muted">Cloud saves under 1 s</span>
-            <span className="numeric">
-              {saveTotal ? percent((saves[0] ?? 0) + (saves[1] ?? 0), saveTotal) : "—"}
-            </span>
-          </div>
+          {transfersNa ? (
+            <NaRow title="Uploads, downloads and cloud saves" na={transfersNa} />
+          ) : (
+            <div className="panel-foot inline">
+              <span className="muted">Cloud saves under 1 s</span>
+              <span className="numeric">
+                {saveTotal ? percent((saves[0] ?? 0) + (saves[1] ?? 0), saveTotal) : "—"}
+              </span>
+            </div>
+          )}
           <p className="panel-note">
             Ranges per operation, not bandwidth. Repeated saves count again.
           </p>

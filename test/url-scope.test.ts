@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { customRangeError, readScope, scopeSearch, validScope } from "../web/ranges";
 import { bucketLabel, eventLabel } from "../web/labels";
 import { bytes, signed } from "../web/data";
-import { readReport } from "../web/ReportInspector";
+import { readReport, sampleReport } from "../web/ReportInspector";
 const now = new Date("2026-10-19T12:00:00Z");
 describe("scope from the URL", () => {
   it("ignores keys the dashboard does not own", () => {
@@ -68,6 +68,10 @@ describe("readable labels and formats", () => {
     expect(bucketLabel("feature_operation", "sketch.add")).toBe("Add sketch");
     expect(bucketLabel("solver_backend", "webgpu")).toBe("WebGPU");
     expect(bucketLabel("part_count", "2_10")).toBe("2–10 parts");
+    expect(eventLabel("lattice_cells")).toBe("Cells per generated lattice");
+    expect(bucketLabel("lattice_cells", "lt_1k")).toBe("<1k cells");
+    expect(bucketLabel("lattice_cells", "gte_100k")).toBe("≥100k cells");
+    expect(bucketLabel("lattice_cells", "gte_1m")).toBe("gte_1m");
   });
   it("uses one byte precision and true minus signs", () => {
     expect(bytes(7 * 2 ** 30)).toBe("7.0 GiB");
@@ -84,5 +88,15 @@ describe("report inspector parsing", () => {
     expect(readReport('{"schema":1}')).toEqual({ error: expect.stringMatching(/not a Glimpse v2 report/) });
     const ok = readReport(JSON.stringify({ schema: 2, app: "openfea", rows: [{ event: "error_mesh", bucket: "none", count: 7 }] }));
     expect("report" in ok && ok.report.rows).toHaveLength(1);
+  });
+  it("loads a valid demo sample for the selected app, including OpenLattice3D", () => {
+    for (const [app, expected] of [
+      ["all", "openfea"],
+      ["openzcad", "openfea"],
+      ["openlattice3d", "openlattice3d"],
+    ]) {
+      const result = readReport(JSON.stringify(sampleReport(app!)));
+      expect("report" in result && result.report.app).toBe(expected);
+    }
   });
 });

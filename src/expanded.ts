@@ -8,6 +8,10 @@ export const TIMINGS = [
 ] as const;
 export const SIZES = ["lt_1mib", "1_10mib", "10_100mib", "gte_100mib"] as const;
 export const PARTS = ["0", "1", "2_10", "11_100", "gte_101"] as const;
+// Unit cells per generated lattice (OpenLattice3D only, ADR 0001 Option B). Decade ranges with a
+// deliberately wide, open top range: every lattice of 100,000 cells or more shares one range, so
+// the rare largest models never get a range of their own (docs/PRIVACY.md, ADR 0001 review).
+export const CELLS = ["lt_1k", "1k_10k", "10k_100k", "gte_100k"] as const;
 export const DIAGNOSTICS = [
   "error_runtime",
   "error_import",
@@ -105,15 +109,57 @@ export const EXPANDED: Readonly<Record<string, readonly string[]>> = {
     "measure",
     "other",
   ],
+  lattice_cells: CELLS,
   ...Object.fromEntries(DIAGNOSTICS.map((event) => [event, ["none"]])),
 };
+/**
+ * OpenLattice3D's expanded subset (ADR 0001 Option B, accepted 13 Nov 2026): only events that
+ * describe what a browser-only lattice app does. Every other v2 event is rejected for it: the
+ * mesh, solver and cloud codes, transfers, cloud-save, mesh and solver timings, solver backend,
+ * part counts, CAD operations, cloud statuses and the census. `error_feature` is excluded too:
+ * OpenLattice3D has no feature tree, and a failed generation is already the v1 outcome
+ * `generation_failed`, with its cause in the codes below.
+ */
+export const LATTICE_DIAGNOSTICS = [
+  "error_runtime",
+  "error_import",
+  "error_export",
+  "error_storage",
+  "error_render",
+  "error_unresponsive",
+  "error_gpu_lost",
+  "error_out_of_memory",
+  "error_worker",
+] as const satisfies readonly (typeof DIAGNOSTICS)[number][];
+export const LATTICE_CATEGORIES = [
+  "create",
+  "import",
+  "export",
+  "measure",
+  "other",
+] as const;
+export const LATTICE_EXPANDED: Readonly<Record<string, readonly string[]>> = {
+  export_latency: TIMINGS,
+  project_size: SIZES,
+  feature_category: LATTICE_CATEGORIES,
+  lattice_cells: CELLS,
+  ...Object.fromEntries(LATTICE_DIAGNOSTICS.map((event) => [event, ["none"]])),
+};
+/** Apps that may send expanded (v2) metrics and local reports, each within its own scope. */
+export const EXPANDED_APPS = ["openzcad", "openfea", "openlattice3d"] as const;
 export function expandedMetric(
   event: unknown,
   bucket: unknown,
   app: string,
 ): boolean {
-  if (!["openzcad", "openfea"].includes(app)) return false;
   if (typeof event !== "string" || typeof bucket !== "string") return false;
+  if (app === "openlattice3d")
+    return (
+      Object.hasOwn(LATTICE_EXPANDED, event) &&
+      (LATTICE_EXPANDED[event]?.includes(bucket) ?? false)
+    );
+  if (!["openzcad", "openfea"].includes(app) || event === "lattice_cells")
+    return false;
   if (
     app === "openzcad" &&
     [
@@ -137,7 +183,7 @@ export function expandedMetric(
 }
 export type Report = {
   schema: 2;
-  app: "openzcad" | "openfea";
+  app: (typeof EXPANDED_APPS)[number];
   rows: { event: string; bucket: string; count: number }[];
 };
 export function parseReport(value: unknown): Report | null {
@@ -147,7 +193,7 @@ export function parseReport(value: unknown): Report | null {
     Object.keys(v).sort().join(",") !== "app,rows,schema" ||
     v.schema !== 2 ||
     typeof v.app !== "string" ||
-    !["openzcad", "openfea"].includes(v.app) ||
+    !(EXPANDED_APPS as readonly string[]).includes(v.app) ||
     !Array.isArray(v.rows) ||
     v.rows.length > 128
   )

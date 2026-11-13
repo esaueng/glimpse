@@ -7,7 +7,8 @@ import { describe, expect, it } from "vitest";
 import { LineChart, shortDay } from "../web/charts";
 import { Panel, Tile } from "../web/ui";
 import { CoverageTable } from "../web/cloudflare/tables";
-import { AccountActivity } from "../web/views";
+import { AccountActivity, Issues, Overview, Storage } from "../web/views";
+import { demoStats } from "../web/demo-data";
 import { RETENTION_SOURCE } from "../src/cloudflare/model";
 
 const html = (node: ReactElement) => renderToStaticMarkup(node);
@@ -202,5 +203,70 @@ describe("CoverageTable", () => {
     );
     // A healthy heartbeat is not highlighted.
     expect(out).toMatch(/>Analytics retention<\/div><\/td><td role="cell"><span/);
+  });
+});
+
+// ADR 0001 Option B: OpenLattice3D's subset renders where it applies; the rest stays N/A.
+describe("OpenLattice3D panels", () => {
+  const now = new Date("2026-11-13T12:00:00Z");
+  const load = (app: string) => {
+    const range = { app, from: "2026-11-01", to: "2026-11-13" };
+    return {
+      basic: demoStats({ ...range, level: "basic" }, now),
+      optional: demoStats({ ...range, level: "optional" }, now),
+    };
+  };
+  /** Titles of panels collapsed to an N/A row. */
+  const naPanels = (out: string) =>
+    [
+      ...out.matchAll(
+        /class="panel panel-na[^"]*"><div class="panel-heading"><h[23]>([^<]+)</g,
+      ),
+    ].map((m) => m[1]);
+  /** N/A rows inside a panel, as "title: owners". */
+  const naRows = (out: string) =>
+    [
+      ...out.matchAll(
+        /class="panel-foot inline na-row"><span class="muted small">([^<]+)<\/span><span class="panel-meta"><strong class="na">N\/A<\/strong> · ([^<]+)</g,
+      ),
+    ].map((m) => `${m[1]}: ${m[2]}`);
+
+  it("shows feature categories and lattice cell counts for OpenLattice3D", () => {
+    const out = html(<Overview data={load("openlattice3d")} app="openlattice3d" />);
+    expect(naPanels(out)).toEqual(["Cloud growth", "Top CAD operations", "Simulation workflow"]);
+    expect(naRows(out)).toEqual(["Parts per saved model: OpenZCAD and OpenFEA only"]);
+    expect(out).toContain("Unit cells per generated lattice");
+    expect(out).toContain("≥100k");
+    expect(out).toContain("Edit, Mesh, Solve: not sent by OpenLattice3D.");
+  });
+  it("shows the lattice cell count as an N/A row for the other apps", () => {
+    for (const app of ["openzcad", "openfea"]) {
+      const out = html(<Overview data={load(app)} app={app} />);
+      expect(naRows(out)).toEqual(["Unit cells per generated lattice: OpenLattice3D only"]);
+      expect(out).not.toContain("not sent by");
+    }
+    const all = html(<Overview data={load("all")} app="all" />);
+    expect(naRows(all)).toEqual([]);
+    expect(all).toContain("Unit cells per generated lattice");
+    expect(all).toContain("Parts per saved model");
+  });
+  it("lists OpenLattice3D diagnostics and export timing on Issues, not cloud or solver rows", () => {
+    const out = html(<Issues data={load("openlattice3d")} app="openlattice3d" demo />);
+    expect(naPanels(out)).toEqual(["Cloud request failures"]);
+    expect(out).toMatch(/OpenLattice3D \d/);
+    expect(out).toContain("Out of memory");
+    expect(out).not.toContain(">Mesh<");
+    expect(out).toContain("<span>Exports</span>");
+    for (const row of ["Cloud saves", "Meshing · OpenFEA", "Solving · OpenFEA"])
+      expect(out).not.toContain(`<span>${row}</span>`);
+  });
+  it("shows OpenLattice3D saved project sizes on Storage, with transfers N/A", () => {
+    const out = html(<Storage data={load("openlattice3d")} app="openlattice3d" />);
+    expect(naPanels(out)).toEqual(["Project sizes", "Snapshot history"]);
+    expect(naRows(out)).toEqual([
+      "Uploads, downloads and cloud saves: OpenZCAD and OpenFEA only",
+    ]);
+    expect(out).toContain("<span>Saved projects</span>");
+    expect(out).not.toContain("<span>Uploads</span>");
   });
 });

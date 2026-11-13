@@ -25,7 +25,42 @@ export function readReport(text: string): { report: Report } | { error: string }
           "Report rejected: the JSON is valid but is not a Glimpse v2 report. Reports contain only schema, app and allowlisted aggregate counts.",
       };
 }
-export function ReportInspector({ demo = false }: { demo?: boolean }) {
+/**
+ * Fictional report for the demo's "Load sample report" button. With the OpenLattice3D filter it
+ * shows that app's subset (ADR 0001); otherwise an OpenFEA report.
+ */
+export function sampleReport(app: string): Report {
+  return app === "openlattice3d"
+    ? {
+        schema: 2,
+        app: "openlattice3d",
+        rows: [
+          { event: "error_out_of_memory", bucket: "none", count: 2 },
+          { event: "error_gpu_lost", bucket: "none", count: 1 },
+          { event: "lattice_cells", bucket: "10k_100k", count: 14 },
+          { event: "export_latency", bucket: "1s_10s", count: 9 },
+          { event: "project_size", bucket: "1_10mib", count: 6 },
+        ],
+      }
+    : {
+        schema: 2,
+        app: "openfea",
+        rows: [
+          { event: "error_mesh", bucket: "none", count: 7 },
+          { event: "error_gpu_lost", bucket: "none", count: 2 },
+          { event: "solver_backend", bucket: "webgpu", count: 124 },
+          { event: "mesh_latency", bucket: "1s_10s", count: 83 },
+        ],
+      };
+}
+export function ReportInspector({
+  demo = false,
+  app = "all",
+}: {
+  demo?: boolean;
+  /** The dashboard's app filter; only chooses which sample the demo loads. */
+  app?: string;
+}) {
   const input = useRef<HTMLInputElement>(null),
     [report, setReport] = useState<Report | null>(null),
     [error, setError] = useState(""),
@@ -80,18 +115,7 @@ export function ReportInspector({ demo = false }: { demo?: boolean }) {
               type="button"
               onClick={() => {
                 sequence.current++;
-                parse(
-                  JSON.stringify({
-                    schema: 2,
-                    app: "openfea",
-                    rows: [
-                      { event: "error_mesh", bucket: "none", count: 7 },
-                      { event: "error_gpu_lost", bucket: "none", count: 2 },
-                      { event: "solver_backend", bucket: "webgpu", count: 124 },
-                      { event: "mesh_latency", bucket: "1s_10s", count: 83 },
-                    ],
-                  }),
-                );
+                parse(JSON.stringify(sampleReport(app)));
               }}
             >
               Load sample report

@@ -1,11 +1,69 @@
 # ADR 0001: OpenLattice3D and the expanded (v2) analytics contract
 
-- **Status:** Proposed — owner decision
-- **Date:** 12 November 2026
+- **Status:** Accepted — Option B (owner, 13 November 2026)
+- **Date:** proposed 12 November 2026; accepted 13 November 2026
 - **Roadmap:** [feature candidate 3](../ROADMAP.md#feature-candidates)
-- **Deciders:** the owner. Nothing here is implemented; no app repository is changed.
+- **Deciders:** the owner. The Glimpse side is implemented; no app repository is changed.
 
-## Context
+## Decision
+
+On 13 November 2026 the owner chose **Option B, targeted subset**. Glimpse now
+accepts exactly the events in the table below from OpenLattice3D, in live
+counts and in local reports (`app: "openlattice3d"`), and rejects every other
+v2 event from it. The privacy review is
+[Review: OpenLattice3D targeted subset (ADR 0001)](../PRIVACY.md#review-openlattice3d-targeted-subset-adr-0001).
+
+| Event | Buckets | Lattice meaning |
+| --- | --- | --- |
+| `error_runtime` | `none` | An uncaught error anywhere in the page, the generic fallback |
+| `error_import` | `none` | Opening an input model or a saved project failed. Included because OpenLattice3D imports models, as the `import` feature category records |
+| `error_export` | `none` | Writing an export file failed (alongside the v1 `export_failed` outcome, as for the other apps) |
+| `error_storage` | `none` | Saving or restoring the project locally failed |
+| `error_render` | `none` | The 3D viewport failed to draw |
+| `error_unresponsive` | `none` | The main thread was blocked for 5 s or more, typically during a large generation |
+| `error_gpu_lost` | `none` | The WebGPU or WebGL device or context was lost |
+| `error_out_of_memory` | `none` | An allocation failed or the browser signalled out of memory |
+| `error_worker` | `none` | A generation or export Web Worker failed or stopped unexpectedly |
+| `export_latency` | the five timing ranges | Export time |
+| `project_size` | the four size ranges | Saved project file size |
+| `feature_category` | `create`, `import`, `export`, `measure`, `other` | Coarse category of a completed action |
+| `lattice_cells` (new) | `lt_1k`, `1k_10k`, `10k_100k`, `gte_100k` | Unit cells in a successfully generated lattice, one observation per generation |
+
+Excluded diagnostic codes: `error_mesh` and `error_solver` (no meshing or
+solving), `error_cloud_save` and `error_cloud_load` (no cloud storage), and
+`error_feature`: OpenLattice3D has no feature tree, and a failed generation is
+already the v1 outcome `generation_failed`, with its cause in the codes above.
+No `error_generation` code was added; that would be new vocabulary needing its
+own review. Everything else in v2 stays rejected for OpenLattice3D:
+`cloud_status`, `transfer_upload`, `transfer_download`, `save_latency`,
+`mesh_latency`, `solver_latency`, `solver_backend`, `part_count`,
+`feature_operation`, the `edit`, `mesh` and `solve` feature categories, and the
+census. The v1 scope (`LATTICE_OPTIONAL` in `src/contract.ts`) is unchanged.
+
+**Cell-count ranges.** Four decade ranges: under 1,000, 1,000–9,999,
+10,000–99,999, and 100,000 or more. The top range is deliberately wide and open:
+very large lattices are likely rare among opted-in users, so splitting them (for
+example at 1,000,000) could leave a range holding one or two people. Merging
+everything from 100,000 cells up keeps the rarest models in the same range as
+merely large ones, while still separating the sizes where browser memory and GPU
+limits start to matter, which is the planning question. The app counts cells
+and sends only the range; the count itself never leaves OpenLattice3D.
+
+No migration: rows go to `daily_counts`, whose `app` check already allows
+`openlattice3d` (`0002_openlattice3d.sql`) and whose `event`/`bucket` columns
+are not constrained in SQL. Retention is unchanged (90 UTC days).
+
+**Not done here.** The OpenLattice3D side is in the OpenLattice3D repository and
+is not part of this change: the adapter at its failure sites, export and save
+paths and generation step, a new consent version with an updated notice for the
+broader scope (its legacy grant does not carry over), the local report download,
+and confirmation of this event list against its actual failure sites. Until that
+adapter ships, OpenLattice3D sends none of these events. Glimpse cannot verify
+app-side consent, as for the other apps.
+
+The analysis that led to the decision follows unchanged.
+
+## Context (as of 12 November 2026, before the decision)
 
 Glimpse has two optional-analytics vocabularies.
 
@@ -108,7 +166,7 @@ model-size candidate.
 - **Downside:** lattice failures stay opaque (`generation_failed` only), and
   the dashboard keeps N/A panels for one of three apps.
 
-## Recommendation
+## Recommendation (as proposed, 12 November 2026)
 
 **Option B, sequenced after the diagnostic-code review is approved.** The
 largest operational gap is failure insight for browser-heavy lattice generation,
@@ -124,8 +182,9 @@ only documentation.
 
 Before any implementation:
 
-1. The owner chooses A, B or C and records it here (Status: Accepted or Rejected).
-2. For A or B: a privacy review entry in [PRIVACY.md](../PRIVACY.md), the
-   OpenLattice3D notice and consent-version change, and the list of events
-   confirmed against OpenLattice3D's actual failure sites.
-3. For C: update the documents listed under option C.
+1. Done: the owner chose B on 13 November 2026 (see Decision).
+2. For A or B: a privacy review entry in [PRIVACY.md](../PRIVACY.md) (done for
+   B), the OpenLattice3D notice and consent-version change, and the list of
+   events confirmed against OpenLattice3D's actual failure sites (both pending,
+   in the OpenLattice3D repository).
+3. For C: update the documents listed under option C (not applicable).

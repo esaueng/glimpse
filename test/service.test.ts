@@ -8,6 +8,7 @@ import {
   ACTIVITY_MIN_COUNT,
   census,
   DIAGNOSTICS,
+  EXPANDED,
   parseReport,
   publicCensus,
   thresholdActivity,
@@ -695,19 +696,17 @@ const NEW_CODES = [
   "error_out_of_memory",
   "error_worker",
 ];
+// OpenLattice3D sends them too since ADR 0001 Option B (accepted 13 Nov 2026).
 describe("additional diagnostic codes", () => {
-  it("accepts the fixed codes from OpenZCAD and OpenFEA only, with bucket none", () => {
+  it("accepts the fixed codes from all three apps, with bucket none", () => {
     for (const event of NEW_CODES) {
       expect(DIAGNOSTICS).toContain(event);
-      for (const app of ["openzcad", "openfea"] as const)
+      for (const app of ["openzcad", "openfea", "openlattice3d"] as const)
         expect(metric({ level: "optional", event, bucket: "none" }, app)).toEqual({
           level: "optional",
           event,
           bucket: "none",
         });
-      expect(
-        metric({ level: "optional", event, bucket: "none" }, "openlattice3d"),
-      ).toBeNull();
       expect(metric({ level: "basic", event, bucket: "none" }, "openzcad")).toBeNull();
       expect(
         metric({ level: "optional", event, bucket: "GPU hung in shader" }, "openfea"),
@@ -716,8 +715,8 @@ describe("additional diagnostic codes", () => {
     for (const event of ["error_gpu", "error_network", "error_crash", "error_worker_oom"])
       expect(metric({ level: "optional", event, bucket: "none" }, "openzcad")).toBeNull();
   });
-  it("accepts the codes in local reports for OpenZCAD and OpenFEA, never other apps", () => {
-    for (const app of ["openzcad", "openfea"]) {
+  it("accepts the codes in local reports for all three apps, never unknown apps", () => {
+    for (const app of ["openzcad", "openfea", "openlattice3d"]) {
       const report = {
         schema: 2,
         app,
@@ -728,17 +727,17 @@ describe("additional diagnostic codes", () => {
     expect(
       parseReport({
         schema: 2,
-        app: "openlattice3d",
+        app: "openslicer",
         rows: [{ event: "error_gpu_lost", bucket: "none", count: 1 }],
       }),
     ).toBeNull();
   });
-  it("counts the codes through the real RPC and rejects them from OpenLattice3D", async () => {
+  it("counts the codes through the real RPC for each app", async () => {
     for (const event of NEW_CODES) {
       const value = { level: "optional", event, bucket: "none" };
       expect((await ingest("cad", value)).status).toBe(204);
       expect((await ingest("fea", value)).status).toBe(204);
-      expect((await ingest("lattice", value)).status).toBe(400);
+      expect((await ingest("lattice", value)).status).toBe(204);
     }
     const { rows } = (await (await stats("&level=optional")).json()) as {
       rows: { app: string; event: string; count: number }[];
@@ -751,8 +750,173 @@ describe("additional diagnostic codes", () => {
           .sort(),
       ).toEqual([
         ["openfea", 1],
+        ["openlattice3d", 1],
         ["openzcad", 1],
       ]);
+  });
+});
+
+// ADR 0001 Option B, accepted by the owner on 13 Nov 2026 (docs/PRIVACY.md,
+// "Review: OpenLattice3D targeted subset"). Written out here rather than imported, so a change
+// to the allowlist in src/expanded.ts has to change this test too.
+const LATTICE_SUBSET: Record<string, readonly string[]> = {
+  error_runtime: ["none"],
+  error_import: ["none"],
+  error_export: ["none"],
+  error_storage: ["none"],
+  error_render: ["none"],
+  error_unresponsive: ["none"],
+  error_gpu_lost: ["none"],
+  error_out_of_memory: ["none"],
+  error_worker: ["none"],
+  export_latency: ["lt_100ms", "100ms_1s", "1s_10s", "10s_60s", "gte_60s"],
+  project_size: ["lt_1mib", "1_10mib", "10_100mib", "gte_100mib"],
+  feature_category: ["create", "import", "export", "measure", "other"],
+  lattice_cells: ["lt_1k", "1k_10k", "10k_100k", "gte_100k"],
+};
+const LATTICE_REJECTED = [
+  "error_mesh",
+  "error_solver",
+  "error_cloud_save",
+  "error_cloud_load",
+  "error_feature",
+  "feature_operation",
+  "cloud_status",
+  "part_count",
+  "transfer_upload",
+  "transfer_download",
+  "mesh_latency",
+  "solver_latency",
+  "save_latency",
+  "solver_backend",
+];
+const opt = (event: string, bucket: string) => ({ level: "optional", event, bucket });
+describe("OpenLattice3D targeted subset (ADR 0001 Option B)", () => {
+  it("accepts every bucket of each subset event from OpenLattice3D, Optional level only", () => {
+    for (const [event, buckets] of Object.entries(LATTICE_SUBSET))
+      for (const bucket of buckets) {
+        expect(metric(opt(event, bucket), "openlattice3d")).toEqual(
+          opt(event, bucket),
+        );
+        expect(
+          metric({ level: "basic", event, bucket }, "openlattice3d"),
+        ).toBeNull();
+      }
+  });
+  it("rejects every other expanded event and bucket from OpenLattice3D", () => {
+    // Every event in the v2 vocabulary is either in the subset or listed as rejected.
+    expect(
+      Object.keys(EXPANDED).filter((e) => !Object.hasOwn(LATTICE_SUBSET, e)).sort(),
+    ).toEqual([...LATTICE_REJECTED].sort());
+    for (const event of LATTICE_REJECTED) {
+      expect(EXPANDED[event]!.length).toBeGreaterThan(0);
+      for (const bucket of EXPANDED[event]!)
+        expect(metric(opt(event, bucket), "openlattice3d")).toBeNull();
+    }
+    // Feature categories that have no lattice meaning.
+    for (const bucket of ["edit", "mesh", "solve"])
+      expect(metric(opt("feature_category", bucket), "openlattice3d")).toBeNull();
+    // Buckets outside the fixed ranges, including finer or exact cell counts.
+    for (const [event, bucket] of [
+      ["lattice_cells", "gte_1m"],
+      ["lattice_cells", "12345"],
+      ["lattice_cells", "none"],
+      ["lattice_cells", "1_10mib"],
+      ["export_latency", "none"],
+      ["project_size", "gte_1gib"],
+      ["error_gpu_lost", "NVIDIA"],
+      ["error_generation", "none"],
+    ])
+      expect(metric(opt(event!, bucket!), "openlattice3d")).toBeNull();
+    // v1 scope is unchanged, and there is still no census for OpenLattice3D.
+    for (const event of ["solver_completed", "workflow_model", "feature_used"])
+      expect(metric(opt(event, "none"), "openlattice3d")).toBeNull();
+    expect(metric(opt("generation_failed", "none"), "openlattice3d")).not.toBeNull();
+    expect(census(validCensus, "openlattice3d")).toBeNull();
+  });
+  it("keeps the lattice cell count to OpenLattice3D, and the other apps' scopes unchanged", () => {
+    for (const app of ["openzcad", "openfea"] as const) {
+      for (const bucket of LATTICE_SUBSET.lattice_cells!)
+        expect(metric(opt("lattice_cells", bucket), app)).toBeNull();
+      for (const bucket of ["edit", "mesh", "solve"])
+        expect(metric(opt("feature_category", bucket), app)).not.toBeNull();
+      expect(metric(opt("error_feature", "none"), app)).not.toBeNull();
+    }
+    expect(metric(opt("error_mesh", "none"), "openfea")).not.toBeNull();
+    expect(metric(opt("error_mesh", "none"), "openzcad")).toBeNull();
+    expect(metric(opt("cloud_status", "server"), "openzcad")).not.toBeNull();
+    expect(metric(opt("cloud_status", "server"), "openfea")).toBeNull();
+  });
+  it("accepts OpenLattice3D local reports with the same per-app scope", () => {
+    const rows = Object.entries(LATTICE_SUBSET).flatMap(([event, buckets]) =>
+      buckets.map((bucket) => ({ event, bucket, count: 3 })),
+    );
+    expect(rows.length).toBeLessThanOrEqual(128);
+    const report = { schema: 2, app: "openlattice3d", rows };
+    expect(parseReport(report)).toEqual(report);
+    for (const event of LATTICE_REJECTED)
+      expect(
+        parseReport({
+          schema: 2,
+          app: "openlattice3d",
+          rows: [{ event, bucket: EXPANDED[event]![0], count: 1 }],
+        }),
+      ).toBeNull();
+    for (const row of [
+      { event: "feature_category", bucket: "solve", count: 1 },
+      { event: "lattice_cells", bucket: "gte_1m", count: 1 },
+      { event: "generation_failed", bucket: "none", count: 1 },
+    ])
+      expect(parseReport({ schema: 2, app: "openlattice3d", rows: [row] })).toBeNull();
+    for (const app of ["openzcad", "openfea"])
+      expect(
+        parseReport({
+          schema: 2,
+          app,
+          rows: [{ event: "lattice_cells", bucket: "lt_1k", count: 1 }],
+        }),
+      ).toBeNull();
+  });
+  it("stores accepted events in daily_counts through the real RPC, without a migration", async () => {
+    const events: [string, string][] = [
+      ["error_runtime", "none"],
+      ["error_import", "none"],
+      ["error_export", "none"],
+      ["error_storage", "none"],
+      ["error_render", "none"],
+      ["export_latency", "10s_60s"],
+      ["project_size", "10_100mib"],
+      ["feature_category", "measure"],
+      ...LATTICE_SUBSET.lattice_cells!.map((b): [string, string] => ["lattice_cells", b]),
+    ];
+    for (const [event, bucket] of events)
+      expect((await ingest("lattice", opt(event, bucket))).status).toBe(204);
+    for (const event of LATTICE_REJECTED)
+      expect(
+        (await ingest("lattice", opt(event, EXPANDED[event]![0]!))).status,
+      ).toBe(400);
+    expect((await ingest("lattice", opt("feature_category", "solve"))).status).toBe(400);
+    expect((await ingest("cad", opt("lattice_cells", "lt_1k"))).status).toBe(400);
+    expect((await ingest("fea", opt("lattice_cells", "lt_1k"))).status).toBe(400);
+    const { rows } = (await (
+      await stats("&level=optional&app=openlattice3d")
+    ).json()) as { rows: { app: string; event: string; bucket: string; count: number }[] };
+    for (const [event, bucket] of events)
+      expect(rows.find((r) => r.event === event && r.bucket === bucket)?.count).toBe(1);
+    expect(rows.some((r) => LATTICE_REJECTED.includes(r.event))).toBe(false);
+    const db = await mf.getD1Database("DB", "collector");
+    expect(
+      await db
+        .prepare(
+          "SELECT count(*) AS n FROM daily_counts WHERE app='openlattice3d' AND level='optional' AND event='lattice_cells'",
+        )
+        .first("n"),
+    ).toBe(4);
+    expect(
+      await db
+        .prepare("SELECT count(*) AS n FROM daily_counts WHERE event='lattice_cells' AND app<>'openlattice3d'")
+        .first("n"),
+    ).toBe(0);
   });
 });
 

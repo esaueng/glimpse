@@ -1,5 +1,6 @@
 import { APPS, BUCKETS, dateRange, metric, type Row } from "../src/contract";
 import {
+  CELLS,
   EXPANDED,
   SIZES,
   PARTS,
@@ -14,6 +15,13 @@ const diagnosticBase: Record<string, number> = {
   error_unresponsive: 3,
   error_gpu_lost: 1,
   error_out_of_memory: 1,
+};
+// Large lattices are generated in the browser, so memory and GPU failures lead for OpenLattice3D.
+const latticeDiagnosticBase: Record<string, number> = {
+  error_out_of_memory: 6,
+  error_gpu_lost: 5,
+  error_worker: 3,
+  error_import: 2,
 };
 
 // Entirely fictional, deterministic counts. No network, storage, or production imports.
@@ -90,9 +98,18 @@ export function demoStats(range: Range, now = new Date()): Stats {
       PARTS.forEach((bucket, i) =>
         add("part_count", bucket, [4, 35, 63, 22, 5][i]),
       );
+      CELLS.forEach((bucket, i) =>
+        add("lattice_cells", bucket, [56, 104, 42, 8][i]),
+      );
       for (const [event, buckets] of Object.entries(EXPANDED)) {
         if (event.startsWith("error_"))
-          add(event, "none", diagnosticBase[event] ?? 2);
+          add(
+            event,
+            "none",
+            (app === "openlattice3d" ? latticeDiagnosticBase[event] : undefined) ??
+              diagnosticBase[event] ??
+              2,
+          );
         if (
           [
             "feature_operation",

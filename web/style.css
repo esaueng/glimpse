@@ -608,7 +608,8 @@ main {
   padding-bottom: 12px;
   background: var(--sunken);
 }
-.panel-na .na {
+.panel-na .na,
+.na-row .na {
   font-family: var(--mono);
   font-weight: 500;
   color: var(--text);
@@ -637,6 +638,17 @@ main {
   flex-direction: row;
   justify-content: space-between;
   align-items: baseline;
+}
+/* A measure inside a panel that the app filter excludes; wraps on narrow panels. */
+.na-row {
+  flex-wrap: wrap;
+  gap: 4px 12px;
+}
+/* The first measure in a panel that stacks several (later ones use .panel-foot). */
+.measure {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 .empty,
 .empty-cell {
