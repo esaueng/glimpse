@@ -63,9 +63,9 @@ not collected yet are listed in [proposed metrics](docs/PROPOSED-METRICS.md).
 | --- | --- |
 | **OpenZCAD** | API counters; opt-in CAD operations, exports, diagnostics, size/part/transfer observations; cloud account and storage snapshots with separate account permission |
 | **OpenFEA** | API counters; opt-in mesh/solver/export outcomes, workflow steps, diagnostics, and size/part/transfer observations. No cloud account census |
-| **OpenLattice3D** | API counters; opt-in workspace opens, export and generation outcomes, and operation timing. Expanded v2 metrics and local reports do not apply; [ADR 0001](docs/decisions/0001-openlattice3d-v2-parity.md) proposes options for the owner |
+| **OpenLattice3D** | API counters; opt-in workspace opens, export and generation outcomes, and operation timing. Also accepted, not yet sent ([ADR 0001](docs/decisions/0001-openlattice3d-v2-parity.md) Option B, accepted 13 November 2026): a targeted v2 subset of diagnostics, export time, saved project size, feature categories and lattice cell-count ranges, plus local reports. No cloud, transfer, solver or CAD-operation metrics. OpenLattice3D sends them only after its adapter and new consent version ship |
 
-The service also accepts four more OpenZCAD/OpenFEA diagnostic codes and
+The service also accepts four more diagnostic codes (from all three apps) and
 optional OpenZCAD account-activity counts (saved in the last 7 and 30 days, idle
 for 90 days or more; counts below 5 are withheld). Their privacy review was
 approved on 13 November 2026, but no app sends them yet, so the dashboard shows
@@ -106,7 +106,8 @@ removed by a daily job.
 response times. They count operations, not people, visits, or browser-local work.
 
 **Optional** analytics require an enabled app deployment switch and explicit
-app-local consent. Expanded OpenZCAD/OpenFEA collection requires fresh v2 consent;
+app-local consent. Expanded collection requires fresh consent for the broader scope (v2 in
+OpenZCAD/OpenFEA, a new consent version in OpenLattice3D);
 OpenZCAD account statistics have a separate, expiring permission. Optional totals
 describe the opted-in population only. Workflow steps are independent counts,
 not individual timelines.

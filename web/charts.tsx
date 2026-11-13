@@ -430,11 +430,13 @@ export function Columns({
   tone = "accent",
   show = "value",
   height = 120,
+  empty = "No data in this range.",
 }: {
   items: { label: string; value: number; tone?: Tone }[];
   tone?: Tone;
   show?: "value" | "share";
   height?: number;
+  empty?: string;
 }) {
   const max = Math.max(1, ...items.map((i) => i.value)),
     sum = items.reduce((n, i) => n + i.value, 0);
@@ -456,6 +458,6 @@ export function Columns({
       ))}
     </ol>
   ) : (
-    <p className="empty">No data in this range.</p>
+    <p className="empty">{empty}</p>
   );
 }

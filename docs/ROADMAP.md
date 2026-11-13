@@ -47,6 +47,7 @@ moves to the table above. Owners are unassigned until someone takes the item.
 | 7 | Hourly census delivery | Read OpenZCAD's `daily_census` row for the current day twice, a few hours apart, on several days | The stored `generation` advances between reads within a day, and each UTC day has a row while any account permission exists | unassigned | Yes: production D1 read |
 | 8 | Dashboard and demo deployment after #21, #22 and #26 | Confirm the private Worker version built from current main; run `npm run deploy:demo` under authorization; repeat the demo checks in [SETUP.md](SETUP.md#public-synthetic-demo) | Private dashboard shows five pages including Cloudflare; `/demo` serves the current build with `connect-src 'none'`; live paths still require Access | unassigned | Yes: production deployment |
 | 9 | New diagnostic codes and account-activity counts (feature candidates 1 and 2) | Privacy review [approved 13 Nov 2026](PRIVACY.md#review-additional-diagnostic-codes-and-account-activity). Next: OpenZCAD and OpenFEA adapter PRs; apply `0005_census_activity.sql` to Preview and Production; after a snapshot, open Overview → Cloud growth → Account activity | Adapters merged (OpenZCAD's account-permission wording checked); `0005` in both migration ledgers; `/api/stats` (opt-in) has no `pendingMigrations`; activity shows numbers or "Withheld (fewer than 5)", never a count below 5 | unassigned | Yes: app PRs, migrations |
+| 10 | OpenLattice3D targeted subset (feature candidate 3, [ADR 0001](decisions/0001-openlattice3d-v2-parity.md) Option B) | Glimpse side merged on this branch. Next, in the OpenLattice3D repository: a new consent version and updated notice for the broader scope, the adapter at its failure sites, export and save paths and generation step, and the local report download; confirm the event list against its actual failure sites. Deploy Glimpse first. Then open Issues and Overview with the OpenLattice3D filter | OpenLattice3D adapter merged with its consent-version bump and notice, legacy grants not carried over, DNT/GPC and withdrawal tested; [PRIVACY.md review](PRIVACY.md#review-openlattice3d-targeted-subset-adr-0001) preconditions met; opted-in OpenLattice3D diagnostics, export times, project sizes, categories and cell-count ranges visible; no other v2 event accepted from it | unassigned | Yes: app PR and deployment |
 
 ### Merged on this branch, not yet deployed or recorded
 
@@ -71,6 +72,11 @@ recorded in the ledger:
   `/api/cloudflare` needs `0004` in the D1 migration ledger, or they return a
   503 naming the missing migration. Deploying it before `0004` is applied leaves
   the Cloudflare page on that 503; analytics are unaffected.
+- The OpenLattice3D targeted v2 subset (feature candidate 3, ADR 0001 Option B):
+  nine diagnostic codes, export time, saved project size, five feature
+  categories and the new `lattice_cells` ranges, in live counts and local
+  reports. No migration. OpenLattice3D sends nothing new until its adapter and
+  consent change ship; see open item 10.
 - Four more diagnostic codes and optional OpenZCAD account-activity counts
   (feature candidates 1 and 2), with migration `0005_census_activity.sql`.
   `0005` is an *optional* migration for the guard: deploying before it is
@@ -95,15 +101,18 @@ Details and privacy notes for each are in
 [PROPOSED-METRICS.md](PROPOSED-METRICS.md). None is collected. Every candidate
 needs a privacy review before work starts; for priorities 1 and 2 the review is
 written into [PRIVACY.md](PRIVACY.md#review-additional-diagnostic-codes-and-account-activity)
-and was approved by the owner on 13 November 2026; only the Glimpse side is prepared.
+and was approved by the owner on 13 November 2026; for priority 3 the owner chose
+ADR 0001 Option B the same day, with its
+[review](PRIVACY.md#review-openlattice3d-targeted-subset-adr-0001). Only the
+Glimpse side is prepared.
 
 | Priority | Candidate | Status | Privacy review | Repositories | Migration |
 | --- | --- | --- | --- | --- | --- |
 | 1 | More diagnostic codes (`error_unresponsive`, `error_gpu_lost`, `error_out_of_memory`, `error_worker`) | Implemented in Glimpse on this branch (allowlist, labels, Issues page, reports, demo, tests); not deployed. App adapters not started | Approved 13 Nov 2026. Fixed enum values only; lowest risk | glimpse (`src/expanded.ts`), OpenZCAD, OpenFEA | No: values live in the code allowlist |
 | 2 | Snapshot active accounts (7 and 30 days) and idle accounts (90 days or more) | Implemented in Glimpse on this branch (optional contract fields, k-threshold K = 5, `/api/stats`, Overview, demo, tests); not deployed. OpenZCAD adapter not started | Approved 13 Nov 2026 as drafted: K = 5, no rounding. OpenZCAD account-permission wording to be checked in the adapter PR | glimpse (census schema), OpenZCAD | Yes: `0005_census_activity.sql`, optional for the guard; no application recorded |
-| 3 | Decide OpenLattice3D v2 parity, or drop it explicitly | [ADR 0001](decisions/0001-openlattice3d-v2-parity.md) proposed: recommends a targeted subset. Owner decision; nothing implemented | Not started; depends on the option chosen | glimpse, OpenLattice3D | No for the recommended subset |
+| 3 | OpenLattice3D v2 targeted subset | [ADR 0001](decisions/0001-openlattice3d-v2-parity.md) accepted 13 Nov 2026: Option B. Implemented in Glimpse on this branch (allowlist, `lattice_cells` ranges, reports, Issues/Overview/Storage panels, demo, tests); not deployed. OpenLattice3D adapter and consent-version change pending (open item 10) | [Accepted 13 Nov 2026](PRIVACY.md#review-openlattice3d-targeted-subset-adr-0001) with the ADR choice | glimpse (`src/expanded.ts`), OpenLattice3D | No |
 | Deferred | Active installs, new installs, time since last open, session length, platform | Blocked | Blocked: each conflicts with current [PRIVACY.md](PRIVACY.md) promises or consent text, which must be revised first. Time since last open is a returning-visitor metric; platform is a fingerprinting dimension on small populations | glimpse, all apps | Possibly |
-| Later | Accounts by storage used, revisions per project, model size, export formats | Not started | Not started. Snapshot ranges need the same k-threshold; import formats and WebGPU use are already partly covered by existing metrics | glimpse, OpenZCAD, OpenFEA | Snapshot fields: yes |
+| Later | Accounts by storage used, revisions per project, model size (OpenFEA half), export formats | Not started | Not started. Snapshot ranges need the same k-threshold; import formats and WebGPU use are already partly covered by existing metrics | glimpse, OpenZCAD, OpenFEA | Snapshot fields: yes |
 | Deferred | App-version dimension | Blocked | Blocked on contract redesign: `record({ level, event, bucket })` has exactly three keys and no room for a dimension | glimpse, all apps | Yes |
 
 ## Non-goals
