@@ -134,11 +134,8 @@ states.
 ## Dependency updates
 
 Dependabot PR #31 (jose 6.2.15, vite 8.3.6, vitest 5.1.0, wrangler 4.157.0 /
-workerd 1.20261103.1; patch and minor only) passed verify, audit,
-dependency-review and the privacy checks. One `secret-scan` run failed because
-the gitleaks download returned HTTP 504, while a second `secret-scan` run
-passed. The download now retries for up to two minutes, and the archive is
-still checked against its checksum. **Recommendation:** rebase or re-run #31
-and merge it. After the workerd bump, `npm run check:types` reports a warning
-for the runtime section and does not fail; run `npm run types` in a follow-up.
-
+workerd 1.20261103.1; patch and minor only) was merged on 13 November 2026,
+after its transient `secret-scan` failure (gitleaks download HTTP 504) passed on
+re-run. This branch merges it and regenerates `worker-configuration.d.ts` for the
+new workerd. The gitleaks download now retries for up to two minutes and is
+still checked against its checksum.
