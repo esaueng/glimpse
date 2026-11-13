@@ -1,21 +1,30 @@
-import { useEffect, useRef, useState } from "react";
-import { dateRange } from "../src/contract";
+import {
+  Component,
+  lazy,
+  Suspense,
+  useEffect,
+  useRef,
+  type ErrorInfo,
+  type ReactNode,
+} from "react";
 import { appName, type Loaded, type Range, type Stats } from "./data";
+import { useLoader, useUrlState, writeSearch } from "./hooks";
 import { RangePicker } from "./RangePicker";
 import {
   formatRange,
-  isPreset,
-  presetRange,
+  readScope,
   refreshedTimeframe,
-  type Preset,
+  scopeSearch,
+  validScope,
+  type Scope,
 } from "./ranges";
 import { Issues, Overview, Storage } from "./views";
-import {
-  CloudflarePage,
-  type MonitorLoader,
-  type SettingsWriter,
-} from "./Cloudflare";
+import type { MonitorLoader, SettingsWriter } from "./Cloudflare";
 import "./style.css";
+// The Cloudflare monitor is a separate page; load its code only when opened.
+const CloudflarePage = lazy(() =>
+  import("./Cloudflare").then((m) => ({ default: m.CloudflarePage })),
+);
 const views = [
   "Overview",
   "Issues",
@@ -26,36 +35,59 @@ const views = [
 type View = (typeof views)[number];
 // Earlier links used view=diagnostics; the collection level is now chosen per panel.
 const legacyViews: Record<string, View> = { diagnostics: "Issues" };
-type Scope = { app: string; from: string; to: string; preset?: Preset };
-function readLocation(): { range: Scope; view: View } {
-  const query = new URLSearchParams(location.search),
-    view = query.get("view") ?? "",
-    preset =
-      query.get("range") ??
-      (query.has("from") || query.has("to") ? null : "30d");
-  for (const key of ["view", "level", "range"]) query.delete(key);
-  // A preset in the URL rolls forward with the current UTC day.
-  if (isPreset(preset)) {
-    const { from, to } = presetRange(preset);
-    query.set("from", from);
-    query.set("to", to);
-  }
-  const parsed = dateRange(query);
+function readLocation(): { range: Scope; view: View; notice: string } {
+  const view = new URLSearchParams(location.search).get("view") ?? "";
+  const { scope, notice } = readScope(location.search);
   return {
-    range: parsed
-      ? {
-          app: parsed.app,
-          from: parsed.from,
-          to: parsed.to,
-          ...(isPreset(preset) ? { preset } : {}),
-        }
-      : { app: "all", ...presetRange("30d"), preset: "30d" },
+    range: scope,
+    notice,
     view:
       views.find((v) => v.toLowerCase() === view) ??
       legacyViews[view] ??
       "Overview",
   };
 }
+/** Keeps a render error in one part of the page from blanking the dashboard. */
+export class ErrorBoundary extends Component<
+  { children: ReactNode; resetKey?: string; compact?: boolean },
+  { failed: boolean }
+> {
+  state = { failed: false };
+  static getDerivedStateFromError() {
+    return { failed: true };
+  }
+  componentDidCatch(error: unknown, info: ErrorInfo) {
+    console.error(error, info.componentStack);
+  }
+  componentDidUpdate(prior: { resetKey?: string }) {
+    if (this.state.failed && prior.resetKey !== this.props.resetKey)
+      this.setState({ failed: false });
+  }
+  render() {
+    if (!this.state.failed) return this.props.children;
+    return (
+      <section
+        className={this.props.compact ? "panel crash" : "panel crash crash-page"}
+        role="alert"
+      >
+        <h2>Something went wrong showing this {this.props.compact ? "page" : "dashboard"}.</h2>
+        <p>
+          No data was changed. Try again, choose another page or timeframe, or
+          reload.
+        </p>
+        <div className="crash-actions">
+          <button type="button" onClick={() => this.setState({ failed: false })}>
+            Try again
+          </button>
+          <button type="button" onClick={() => location.reload()}>
+            Reload
+          </button>
+        </div>
+      </section>
+    );
+  }
+}
+const utcTime = (iso: string) => new Date(iso).toISOString().slice(11, 19);
 function Privacy() {
   return (
     <section className="panel privacy-content">
@@ -130,65 +162,75 @@ export function Dashboard({
   writeCloudflare?: SettingsWriter;
   demo?: boolean;
 }) {
-  const [initial] = useState(readLocation),
-    [view, setView] = useState<View>(initial.view),
-    [filter, setFilter] = useState(initial.range);
-  const [data, setData] = useState<Loaded | null>(null),
-    [loading, setLoading] = useState(true),
-    [error, setError] = useState(""),
-    [refresh, setRefresh] = useState(0);
+  const [{ view, range: filter, notice }, setLocation] = useUrlState(
+    readLocation,
+    // Normalise an invalid link in place, without adding a history entry.
+    (next) => {
+      if (next.notice)
+        writeSearch(
+          scopeSearch(next.range, next.view.toLowerCase(), location.search),
+          "replace",
+        );
+    },
+  );
+  const setNotice = (notice: string) =>
+    setLocation((current) => ({ ...current, notice }));
   const { app, from, to } = filter;
   const analyticsView = view !== "Cloudflare" && view !== "Privacy";
-  const sequence = useRef(0);
-  function apply(range: Scope, nextView = view, push = true) {
-    setFilter({ ...range });
-    setView(nextView);
-    if (push) {
-      const { preset, ...dates } = range;
-      history.pushState(
-        null,
-        "",
-        `?${new URLSearchParams({
-          ...(preset ? { app: range.app, range: preset } : dates),
-          view: nextView.toLowerCase(),
-        })}`,
+  // Basic and opt-in aggregates stay separate queries; each panel names its source.
+  const { data, loading, error, refresh } = useLoader<Loaded>(
+    (signal) =>
+      Promise.all([
+        loadStats({ app, from, to, level: "basic" }, signal),
+        loadStats({ app, from, to, level: "optional" }, signal),
+      ]).then(([basic, optional]) => ({ basic, optional })),
+    [app, from, to, loadStats],
+    {
+      enabled: analyticsView,
+      errorMessage: (e) =>
+        e instanceof Error ? e.message : "Analytics unavailable.",
+    },
+  );
+  const heading = useRef<HTMLHeadingElement>(null),
+    shownView = useRef(view),
+    baseTitle = useRef(document.title);
+  /**
+   * Apply a scope and view. Page changes add a history entry so back and
+   * forward move between pages; filter changes replace the current entry.
+   * An invalid range is never applied or written to the URL.
+   */
+  function apply(range: Scope, nextView: View = view) {
+    if (!validScope(range)) {
+      setNotice(
+        `${formatRange(range.from, range.to)} is not a valid range of at most 90 UTC days ending by today, so the timeframe was not changed.`,
       );
+      return;
     }
+    setLocation({ range: { ...range }, view: nextView, notice: "" });
+    writeSearch(
+      scopeSearch(range, nextView.toLowerCase(), location.search),
+      nextView === view ? "replace" : "push",
+    );
   }
   useEffect(() => {
-    const restore = () => {
-      const next = readLocation();
-      apply(next.range, next.view, false);
-    };
-    window.addEventListener("popstate", restore);
-    return () => window.removeEventListener("popstate", restore);
-  }, []);
-  useEffect(() => {
-    if (!analyticsView) return;
-    const current = ++sequence.current,
-      controller = new AbortController();
-    setLoading(true);
-    setError("");
-    // Basic and opt-in aggregates stay separate queries; each panel names its source.
-    void Promise.all([
-      loadStats({ app, from, to, level: "basic" }, controller.signal),
-      loadStats({ app, from, to, level: "optional" }, controller.signal),
-    ])
-      .then(([basic, optional]) => {
-        if (current === sequence.current) setData({ basic, optional });
-      })
-      .catch((e) => {
-        if (!controller.signal.aborted && current === sequence.current)
-          setError(e instanceof Error ? e.message : "Analytics unavailable.");
-      })
-      .finally(() => {
-        if (current === sequence.current) setLoading(false);
-      });
-    return () => controller.abort();
-  }, [analyticsView, app, from, to, refresh, loadStats]);
+    document.title = `${view} · ${baseTitle.current}`;
+    // Move focus to the new page heading on navigation, not on first load.
+    if (shownView.current !== view) heading.current?.focus();
+    shownView.current = view;
+  }, [view]);
   const applied = data?.basic.range ?? { ...filter, level: "basic" };
   return (
     <>
+      <a
+        className="skip-link"
+        href="#content"
+        onClick={(e) => {
+          e.preventDefault();
+          document.getElementById("content")?.focus();
+        }}
+      >
+        Skip to content
+      </a>
       <header className="topbar">
         <div className="topbar-inner">
           <a
@@ -223,13 +265,18 @@ export function Dashboard({
             <svg viewBox="0 0 24 24" aria-hidden="true">
               <path d="M12 3 4 6v6c0 5 3.5 8 8 9 4.5-1 8-4 8-9V6Z" />
             </svg>
-            {demo
-              ? "Public demo · sample data"
-              : "Only you · Cloudflare Access"}
+            <span className="access-long">
+              {demo
+                ? "Public demo · sample data"
+                : "Only you · Cloudflare Access"}
+            </span>
+            <span className="access-short">
+              {demo ? "Sample data" : "Only you"}
+            </span>
           </div>
         </div>
       </header>
-      <main>
+      <main id="content" tabIndex={-1}>
         {demo && (
           <aside className="demo-banner" aria-label="Demo information">
             <div>
@@ -240,16 +287,20 @@ export function Dashboard({
               </p>
             </div>
             <a
+              className="banner-link"
               href="https://github.com/esaueng/glimpse"
               target="_blank"
               rel="noreferrer"
             >
-              View on GitHub ↗
+              View on GitHub <span aria-hidden="true">↗</span>
+              <span className="sr-only"> (opens in a new tab)</span>
             </a>
           </aside>
         )}
         <div className="toolbar">
-          <h1>{view}</h1>
+          <h1 ref={heading} tabIndex={-1}>
+            {view}
+          </h1>
           {analyticsView && (
             <div className="controls">
               <RangePicker
@@ -273,24 +324,28 @@ export function Dashboard({
                   {loading
                     ? "Loading…"
                     : error
-                      ? ""
+                      ? "Refresh failed"
                       : data
-                        ? demo
-                          ? "Synthetic data"
-                          : `Updated ${new Date(data.basic.receivedAt).toISOString().slice(11, 16)} UTC`
+                        ? `${demo ? "Synthetic · " : ""}Updated ${utcTime(data.basic.receivedAt)} UTC`
                         : "Awaiting data"}
                 </span>
                 <button
                   type="button"
                   aria-label="Refresh"
                   title="Refresh"
-                  disabled={loading}
+                  // aria-disabled keeps focus on the button while loading.
+                  aria-disabled={loading}
+                  className={loading ? "is-spinning" : undefined}
                   onClick={() => {
-                    setFilter((current) => ({
+                    if (loading) return;
+                    setLocation((current) => ({
                       ...current,
-                      ...refreshedTimeframe(current),
+                      range: {
+                        ...current.range,
+                        ...refreshedTimeframe(current.range),
+                      },
                     }));
-                    setRefresh((current) => current + 1);
+                    refresh();
                   }}
                 >
                   <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -302,6 +357,14 @@ export function Dashboard({
             </div>
           )}
         </div>
+        {notice && (
+          <div className="range-notice" role="status" data-range-notice>
+            <p>{notice}</p>
+            <button type="button" onClick={() => setNotice("")}>
+              Dismiss
+            </button>
+          </div>
+        )}
         {analyticsView && (
           <p className="scope">
             {error ? (
@@ -320,25 +383,38 @@ export function Dashboard({
             )}
           </p>
         )}
-        {view === "Cloudflare" ? (
-          <CloudflarePage
-            load={loadCloudflare}
-            write={writeCloudflare}
-            demo={demo}
-          />
-        ) : view === "Privacy" ? (
-          <Privacy />
-        ) : data ? (
-          <div className={loading ? "content is-loading" : "content"}>
-            {view === "Overview" && <Overview data={data} app={applied.app} />}
-            {view === "Issues" && (
-              <Issues data={data} app={applied.app} demo={demo} />
-            )}
-            {view === "Storage" && <Storage data={data} app={applied.app} />}
-          </div>
-        ) : (
-          !loading && <p className="notice">No data loaded.</p>
-        )}
+        <ErrorBoundary compact resetKey={`${view}:${app}:${from}:${to}`}>
+          {view === "Cloudflare" ? (
+            <Suspense
+              fallback={<p className="notice">Loading Cloudflare monitor…</p>}
+            >
+              <CloudflarePage
+                load={loadCloudflare}
+                write={writeCloudflare}
+                demo={demo}
+              />
+            </Suspense>
+          ) : view === "Privacy" ? (
+            <Privacy />
+          ) : data ? (
+            <div
+              className={loading ? "content is-loading" : "content"}
+              aria-busy={loading}
+            >
+              {view === "Overview" && (
+                <Overview data={data} app={applied.app} />
+              )}
+              {view === "Issues" && (
+                <Issues data={data} app={applied.app} demo={demo} />
+              )}
+              {view === "Storage" && (
+                <Storage data={data} app={applied.app} />
+              )}
+            </div>
+          ) : (
+            !loading && <p className="notice">No data loaded.</p>
+          )}
+        </ErrorBoundary>
         <footer>
           <span>No model contents, visitor IDs, or individual timelines.</span>
           <span>

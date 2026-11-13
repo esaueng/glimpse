@@ -2,8 +2,17 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { build } from "esbuild";
 import { Miniflare, convertV4MiniflareOptions } from "miniflare";
 import { generateKeyPair, exportJWK, SignJWT } from "jose";
-import { readFileSync } from "node:fs";
-import { census, parseReport } from "../src/expanded";
+import { applyMigration, applyMigrations, MIGRATION_FILES } from "./d1-migrations";
+import {
+  ACTIVITY_FIELDS,
+  ACTIVITY_MIN_COUNT,
+  census,
+  DIAGNOSTICS,
+  EXPANDED,
+  parseReport,
+  publicCensus,
+  thresholdActivity,
+} from "../src/expanded";
 import { dateRange, metric } from "../src/contract";
 let mf: Miniflare;
 let token: string;
@@ -78,6 +87,18 @@ beforeAll(async () => {
             }),
         },
         {
+          // Access signing-key endpoint outage: the certs URL fails for this instance.
+          name: "outage-collector",
+          modules: true,
+          script: bundle.outputFiles[0].text,
+          compatibilityDate: "2026-10-15",
+          compatibilityFlags: ["nodejs_compat"],
+          d1Databases: { DB: "outage-db" },
+          bindings: { ACCESS_ISSUER: issuer, ACCESS_AUD: "dashboard" },
+          serviceBindings: { ASSETS: () => new Response("<h1>Outage</h1>") },
+          outboundService: () => new Response("unavailable", { status: 503 }),
+        },
+        {
           name: "cad",
           modules: true,
           script: caller,
@@ -86,6 +107,7 @@ beforeAll(async () => {
             GLIMPSE: { name: "collector", entrypoint: "OpenZCADIngest" },
             RETENTION: { name: "collector", entrypoint: "CronProbe" },
             PREVIEW: "preview-collector",
+            OUTAGE: "outage-collector",
           },
         },
         {
@@ -110,25 +132,13 @@ beforeAll(async () => {
     }),
   );
   const db = await mf.getD1Database("DB", "collector");
-  await db.exec(
-    readFileSync("migrations/0001_aggregates.sql", "utf8").replace(/\n/g, " "),
-  );
+  await applyMigration(db, "0001_aggregates.sql");
   // Upgrade a populated v1 database, as production will do.
   await db
     .prepare("INSERT INTO daily_counts VALUES(?,?,?,?,?,?)")
     .bind(today, "openzcad", "basic", "api_request", "none", 7)
     .run();
-  await db.exec(
-    readFileSync("migrations/0002_openlattice3d.sql", "utf8")
-      .replace(/--[^\n]*/g, "")
-      .replace(/\n/g, " "),
-  );
-  await db.exec(
-    readFileSync("migrations/0003_census.sql", "utf8")
-      .split("\n")
-      .filter((line) => !line.startsWith("--"))
-      .join(" "),
-  );
+  await applyMigrations(db, MIGRATION_FILES.slice(1));
 }, 30000);
 afterAll(async () => {
   await mf?.dispose();
@@ -249,6 +259,69 @@ describe("real Worker RPC, D1 and Access JWT", () => {
     expect(response.headers.get("content-security-policy")).toContain(
       "frame-ancestors 'none'",
     );
+  });
+  it("rejects algorithm-confusion tokens (HS256 and none)", async () => {
+    const jwk = await exportJWK(
+      (await generateKeyPair("RS256", { extractable: true })).publicKey,
+    );
+    const hs256 = await new SignJWT({})
+      .setProtectedHeader({ alg: "HS256", kid: "test" })
+      .setIssuer(issuer)
+      .setAudience("dashboard")
+      .setSubject("test")
+      .setIssuedAt()
+      .setExpirationTime("5m")
+      .sign(new TextEncoder().encode(String(jwk.n)));
+    const encode = (value: unknown) =>
+      Buffer.from(JSON.stringify(value)).toString("base64url");
+    const now = Math.floor(Date.now() / 1000);
+    const none = `${encode({ alg: "none", typ: "JWT" })}.${encode({
+      iss: issuer,
+      aud: "dashboard",
+      sub: "test",
+      iat: now,
+      exp: now + 300,
+    })}.`;
+    for (const bad of [hs256, none])
+      expect(
+        (
+          await mf.dispatchFetch("https://glimpse.test/api/stats", {
+            headers: { "Cf-Access-Jwt-Assertion": bad },
+          })
+        ).status,
+      ).toBe(401);
+  });
+  it("tolerates small clock skew but not stale tokens", async () => {
+    const now = Math.floor(Date.now() / 1000);
+    const signed = (exp: number) =>
+      new SignJWT({})
+        .setProtectedHeader({ alg: "RS256", kid: "test" })
+        .setIssuer(issuer)
+        .setAudience("dashboard")
+        .setSubject("test")
+        .setIssuedAt(exp - 300)
+        .setExpirationTime(exp)
+        .sign(privateKey);
+    const status = async (exp: number) =>
+      (
+        await mf.dispatchFetch("https://glimpse.test/", {
+          headers: { "Cf-Access-Jwt-Assertion": await signed(exp) },
+        })
+      ).status;
+    expect(await status(now - 30)).toBe(200);
+    expect(await status(now - 120)).toBe(401);
+  });
+  it("returns 503, not 401, when Access signing keys cannot be fetched", async () => {
+    const { OUTAGE: outage } = await mf.getBindings<{
+      OUTAGE: { fetch: typeof fetch };
+    }>("cad");
+    const response = await outage.fetch("https://glimpse.test/api/stats", {
+      headers: { "Cf-Access-Jwt-Assertion": token },
+    });
+    expect(response.status).toBe(503);
+    expect(response.headers.get("cache-control")).toContain("no-store");
+    // Requests without a token are still plain authentication failures.
+    expect((await outage.fetch("https://glimpse.test/")).status).toBe(401);
   });
   it("aggregates concurrently by app, day, level, event and bucket", async () => {
     const value = {
@@ -383,12 +456,12 @@ describe("real Worker RPC, D1 and Access JWT", () => {
       ).toBe(401);
     }
     const db = await mf.getD1Database("DB", "preview-collector");
-    for (const migration of ["0001_aggregates.sql", "0002_openlattice3d.sql"])
-      await db.exec(
-        readFileSync(`migrations/${migration}`, "utf8")
-          .replace(/--[^\n]*/g, "")
-          .replace(/\n/g, " "),
-      );
+    // Preview has the analytics migrations; the stats guard needs all three.
+    await applyMigrations(db, [
+      "0001_aggregates.sql",
+      "0002_openlattice3d.sql",
+      "0003_census.sql",
+    ]);
     await db
       .prepare("INSERT INTO daily_counts VALUES(?,?,?,?,?,?)")
       .bind(today, "openlattice3d", "basic", "api_request", "none", 13)
@@ -515,14 +588,22 @@ describe("expanded analytics", () => {
   });
   it("replaces cloud snapshots without summing accounts, rejects stale deliveries and hides them from Basic", async () => {
     const bindings = await mf.getBindings<{
-      GLIMPSE: { snapshot(v: unknown): Promise<void> };
+      GLIMPSE: { snapshot(v: unknown): Promise<{ accepted: boolean }> };
     }>("cad");
-    await bindings.GLIMPSE.snapshot({ ...validCensus, generation: 20 });
-    await bindings.GLIMPSE.snapshot({
-      ...validCensus,
-      generation: 10,
-      accounts: 1,
-    });
+    expect(
+      await bindings.GLIMPSE.snapshot({ ...validCensus, generation: 20 }),
+    ).toEqual({ accepted: true });
+    // A stale generation is reported to the caller instead of being dropped silently.
+    expect(
+      await bindings.GLIMPSE.snapshot({
+        ...validCensus,
+        generation: 10,
+        accounts: 1,
+      }),
+    ).toEqual({ accepted: false });
+    expect(
+      await bindings.GLIMPSE.snapshot({ ...validCensus, generation: 20 }),
+    ).toEqual({ accepted: false });
     await expect(async () => {
       await bindings.GLIMPSE.snapshot({ ...validCensus, email: "private" });
     }).rejects.toThrow();
@@ -562,7 +643,15 @@ describe("expanded analytics", () => {
       "mib1to10",
       "mib10to100",
       "gte100mib",
+      // 0005: nullable, so earlier rows and older OpenZCAD versions stay valid.
+      "activityReported",
+      "active7d",
+      "active30d",
+      "idle90d",
     ]);
+    // A snapshot without activity counts serves without the activity keys.
+    expect(Object.keys(optional.census[0]!)).not.toContain("active7d");
+    expect(Object.keys(optional.census[0]!)).not.toContain("activityReported");
   });
 });
 
@@ -587,7 +676,7 @@ it("rejects late snapshots across UTC days and purges expired snapshot metadata"
     .slice(0, 10);
   await db
     .prepare(
-      "INSERT INTO daily_census SELECT ?,app,generation,accounts,projects,revisions,storedBytes,logicalBytes,unknownArtifacts,lt1mib,mib1to10,mib10to100,gte100mib FROM daily_census WHERE day=?",
+      "INSERT INTO daily_census SELECT ?,app,generation,accounts,projects,revisions,storedBytes,logicalBytes,unknownArtifacts,lt1mib,mib1to10,mib10to100,gte100mib,activityReported,active7d,active30d,idle90d FROM daily_census WHERE day=?",
     )
     .bind(expired, today)
     .run();
@@ -598,4 +687,352 @@ it("rejects late snapshots across UTC days and purges expired snapshot metadata"
       .bind(expired)
       .first(),
   ).toEqual({ n: 0 });
+});
+
+// Privacy review approved 13 Nov 2026 (docs/PRIVACY.md, "Review: additional diagnostic codes and account activity").
+const NEW_CODES = [
+  "error_unresponsive",
+  "error_gpu_lost",
+  "error_out_of_memory",
+  "error_worker",
+];
+// OpenLattice3D sends them too since ADR 0001 Option B (accepted 13 Nov 2026).
+describe("additional diagnostic codes", () => {
+  it("accepts the fixed codes from all three apps, with bucket none", () => {
+    for (const event of NEW_CODES) {
+      expect(DIAGNOSTICS).toContain(event);
+      for (const app of ["openzcad", "openfea", "openlattice3d"] as const)
+        expect(metric({ level: "optional", event, bucket: "none" }, app)).toEqual({
+          level: "optional",
+          event,
+          bucket: "none",
+        });
+      expect(metric({ level: "basic", event, bucket: "none" }, "openzcad")).toBeNull();
+      expect(
+        metric({ level: "optional", event, bucket: "GPU hung in shader" }, "openfea"),
+      ).toBeNull();
+    }
+    for (const event of ["error_gpu", "error_network", "error_crash", "error_worker_oom"])
+      expect(metric({ level: "optional", event, bucket: "none" }, "openzcad")).toBeNull();
+  });
+  it("accepts the codes in local reports for all three apps, never unknown apps", () => {
+    for (const app of ["openzcad", "openfea", "openlattice3d"]) {
+      const report = {
+        schema: 2,
+        app,
+        rows: NEW_CODES.map((event) => ({ event, bucket: "none", count: 2 })),
+      };
+      expect(parseReport(report)).toEqual(report);
+    }
+    expect(
+      parseReport({
+        schema: 2,
+        app: "openslicer",
+        rows: [{ event: "error_gpu_lost", bucket: "none", count: 1 }],
+      }),
+    ).toBeNull();
+  });
+  it("counts the codes through the real RPC for each app", async () => {
+    for (const event of NEW_CODES) {
+      const value = { level: "optional", event, bucket: "none" };
+      expect((await ingest("cad", value)).status).toBe(204);
+      expect((await ingest("fea", value)).status).toBe(204);
+      expect((await ingest("lattice", value)).status).toBe(204);
+    }
+    const { rows } = (await (await stats("&level=optional")).json()) as {
+      rows: { app: string; event: string; count: number }[];
+    };
+    for (const event of NEW_CODES)
+      expect(
+        rows
+          .filter((r) => r.event === event)
+          .map((r) => [r.app, r.count])
+          .sort(),
+      ).toEqual([
+        ["openfea", 1],
+        ["openlattice3d", 1],
+        ["openzcad", 1],
+      ]);
+  });
+});
+
+// ADR 0001 Option B, accepted by the owner on 13 Nov 2026 (docs/PRIVACY.md,
+// "Review: OpenLattice3D targeted subset"). Written out here rather than imported, so a change
+// to the allowlist in src/expanded.ts has to change this test too.
+const LATTICE_SUBSET: Record<string, readonly string[]> = {
+  error_runtime: ["none"],
+  error_import: ["none"],
+  error_export: ["none"],
+  error_storage: ["none"],
+  error_render: ["none"],
+  error_unresponsive: ["none"],
+  error_gpu_lost: ["none"],
+  error_out_of_memory: ["none"],
+  error_worker: ["none"],
+  export_latency: ["lt_100ms", "100ms_1s", "1s_10s", "10s_60s", "gte_60s"],
+  project_size: ["lt_1mib", "1_10mib", "10_100mib", "gte_100mib"],
+  feature_category: ["create", "import", "export", "measure", "other"],
+  lattice_cells: ["lt_1k", "1k_10k", "10k_100k", "gte_100k"],
+};
+const LATTICE_REJECTED = [
+  "error_mesh",
+  "error_solver",
+  "error_cloud_save",
+  "error_cloud_load",
+  "error_feature",
+  "feature_operation",
+  "cloud_status",
+  "part_count",
+  "transfer_upload",
+  "transfer_download",
+  "mesh_latency",
+  "solver_latency",
+  "save_latency",
+  "solver_backend",
+];
+const opt = (event: string, bucket: string) => ({ level: "optional", event, bucket });
+describe("OpenLattice3D targeted subset (ADR 0001 Option B)", () => {
+  it("accepts every bucket of each subset event from OpenLattice3D, Optional level only", () => {
+    for (const [event, buckets] of Object.entries(LATTICE_SUBSET))
+      for (const bucket of buckets) {
+        expect(metric(opt(event, bucket), "openlattice3d")).toEqual(
+          opt(event, bucket),
+        );
+        expect(
+          metric({ level: "basic", event, bucket }, "openlattice3d"),
+        ).toBeNull();
+      }
+  });
+  it("rejects every other expanded event and bucket from OpenLattice3D", () => {
+    // Every event in the v2 vocabulary is either in the subset or listed as rejected.
+    expect(
+      Object.keys(EXPANDED).filter((e) => !Object.hasOwn(LATTICE_SUBSET, e)).sort(),
+    ).toEqual([...LATTICE_REJECTED].sort());
+    for (const event of LATTICE_REJECTED) {
+      expect(EXPANDED[event]!.length).toBeGreaterThan(0);
+      for (const bucket of EXPANDED[event]!)
+        expect(metric(opt(event, bucket), "openlattice3d")).toBeNull();
+    }
+    // Feature categories that have no lattice meaning.
+    for (const bucket of ["edit", "mesh", "solve"])
+      expect(metric(opt("feature_category", bucket), "openlattice3d")).toBeNull();
+    // Buckets outside the fixed ranges, including finer or exact cell counts.
+    for (const [event, bucket] of [
+      ["lattice_cells", "gte_1m"],
+      ["lattice_cells", "12345"],
+      ["lattice_cells", "none"],
+      ["lattice_cells", "1_10mib"],
+      ["export_latency", "none"],
+      ["project_size", "gte_1gib"],
+      ["error_gpu_lost", "NVIDIA"],
+      ["error_generation", "none"],
+    ])
+      expect(metric(opt(event!, bucket!), "openlattice3d")).toBeNull();
+    // v1 scope is unchanged, and there is still no census for OpenLattice3D.
+    for (const event of ["solver_completed", "workflow_model", "feature_used"])
+      expect(metric(opt(event, "none"), "openlattice3d")).toBeNull();
+    expect(metric(opt("generation_failed", "none"), "openlattice3d")).not.toBeNull();
+    expect(census(validCensus, "openlattice3d")).toBeNull();
+  });
+  it("keeps the lattice cell count to OpenLattice3D, and the other apps' scopes unchanged", () => {
+    for (const app of ["openzcad", "openfea"] as const) {
+      for (const bucket of LATTICE_SUBSET.lattice_cells!)
+        expect(metric(opt("lattice_cells", bucket), app)).toBeNull();
+      for (const bucket of ["edit", "mesh", "solve"])
+        expect(metric(opt("feature_category", bucket), app)).not.toBeNull();
+      expect(metric(opt("error_feature", "none"), app)).not.toBeNull();
+    }
+    expect(metric(opt("error_mesh", "none"), "openfea")).not.toBeNull();
+    expect(metric(opt("error_mesh", "none"), "openzcad")).toBeNull();
+    expect(metric(opt("cloud_status", "server"), "openzcad")).not.toBeNull();
+    expect(metric(opt("cloud_status", "server"), "openfea")).toBeNull();
+  });
+  it("accepts OpenLattice3D local reports with the same per-app scope", () => {
+    const rows = Object.entries(LATTICE_SUBSET).flatMap(([event, buckets]) =>
+      buckets.map((bucket) => ({ event, bucket, count: 3 })),
+    );
+    expect(rows.length).toBeLessThanOrEqual(128);
+    const report = { schema: 2, app: "openlattice3d", rows };
+    expect(parseReport(report)).toEqual(report);
+    for (const event of LATTICE_REJECTED)
+      expect(
+        parseReport({
+          schema: 2,
+          app: "openlattice3d",
+          rows: [{ event, bucket: EXPANDED[event]![0], count: 1 }],
+        }),
+      ).toBeNull();
+    for (const row of [
+      { event: "feature_category", bucket: "solve", count: 1 },
+      { event: "lattice_cells", bucket: "gte_1m", count: 1 },
+      { event: "generation_failed", bucket: "none", count: 1 },
+    ])
+      expect(parseReport({ schema: 2, app: "openlattice3d", rows: [row] })).toBeNull();
+    for (const app of ["openzcad", "openfea"])
+      expect(
+        parseReport({
+          schema: 2,
+          app,
+          rows: [{ event: "lattice_cells", bucket: "lt_1k", count: 1 }],
+        }),
+      ).toBeNull();
+  });
+  it("stores accepted events in daily_counts through the real RPC, without a migration", async () => {
+    const events: [string, string][] = [
+      ["error_runtime", "none"],
+      ["error_import", "none"],
+      ["error_export", "none"],
+      ["error_storage", "none"],
+      ["error_render", "none"],
+      ["export_latency", "10s_60s"],
+      ["project_size", "10_100mib"],
+      ["feature_category", "measure"],
+      ...LATTICE_SUBSET.lattice_cells!.map((b): [string, string] => ["lattice_cells", b]),
+    ];
+    for (const [event, bucket] of events)
+      expect((await ingest("lattice", opt(event, bucket))).status).toBe(204);
+    for (const event of LATTICE_REJECTED)
+      expect(
+        (await ingest("lattice", opt(event, EXPANDED[event]![0]!))).status,
+      ).toBe(400);
+    expect((await ingest("lattice", opt("feature_category", "solve"))).status).toBe(400);
+    expect((await ingest("cad", opt("lattice_cells", "lt_1k"))).status).toBe(400);
+    expect((await ingest("fea", opt("lattice_cells", "lt_1k"))).status).toBe(400);
+    const { rows } = (await (
+      await stats("&level=optional&app=openlattice3d")
+    ).json()) as { rows: { app: string; event: string; bucket: string; count: number }[] };
+    for (const [event, bucket] of events)
+      expect(rows.find((r) => r.event === event && r.bucket === bucket)?.count).toBe(1);
+    expect(rows.some((r) => LATTICE_REJECTED.includes(r.event))).toBe(false);
+    const db = await mf.getD1Database("DB", "collector");
+    expect(
+      await db
+        .prepare(
+          "SELECT count(*) AS n FROM daily_counts WHERE app='openlattice3d' AND level='optional' AND event='lattice_cells'",
+        )
+        .first("n"),
+    ).toBe(4);
+    expect(
+      await db
+        .prepare("SELECT count(*) AS n FROM daily_counts WHERE event='lattice_cells' AND app<>'openlattice3d'")
+        .first("n"),
+    ).toBe(0);
+  });
+});
+
+const active = { ...validCensus, accounts: 40, active7d: 12, active30d: 20, idle90d: 9 };
+const snapshotBinding = async () =>
+  (
+    await mf.getBindings<{
+      GLIMPSE: { snapshot(v: unknown): Promise<{ accepted: boolean }> };
+    }>("cad")
+  ).GLIMPSE;
+const storedActivity = async () =>
+  (await mf.getD1Database("DB", "collector"))
+    .prepare("SELECT activityReported,active7d,active30d,idle90d FROM daily_census WHERE day=?")
+    .bind(today)
+    .first();
+const servedCensus = async () =>
+  (await (await stats("&level=optional")).json()) as {
+    census: Record<string, unknown>[];
+    pendingMigrations?: string[];
+  };
+describe("census activity counts", () => {
+  it("keeps snapshots without activity fields valid, as older OpenZCAD versions send them", () => {
+    const old = census(validCensus, "openzcad");
+    expect(old).toEqual(validCensus);
+    for (const k of ACTIVITY_FIELDS) expect(old).not.toHaveProperty(k);
+  });
+  it("accepts all three fields or none, as integers bounded by accounts, or null", () => {
+    expect(census(active, "openzcad")).toEqual(active);
+    const appWithheld = { ...active, active7d: null, idle90d: null };
+    expect(census(appWithheld, "openzcad")).toEqual(appWithheld);
+    const { idle90d: _idle, ...two } = active;
+    const { active7d: _a, active30d: _b, ...one } = active;
+    for (const bad of [
+      two,
+      one,
+      { ...active, active7d: -1 },
+      { ...active, active7d: 1.5 },
+      { ...active, active7d: "12" },
+      { ...active, active30d: NaN },
+      { ...active, active7d: undefined },
+      { ...active, idle90d: 41 }, // more than the consenting accounts
+      { ...active, active7d: 21 }, // a 7-day saver is also a 30-day saver
+      { ...active, active30d: 32 }, // active in 30 days and idle for 90 cannot overlap
+      { ...active, accountIds: [1, 2] },
+    ])
+      expect(census(bad, "openzcad")).toBeNull();
+    expect(census(active, "openfea")).toBeNull();
+  });
+  it(`withholds a count below ${ACTIVITY_MIN_COUNT}, or one with fewer than ${ACTIVITY_MIN_COUNT} accounts outside it`, () => {
+    expect(ACTIVITY_MIN_COUNT).toBe(5);
+    expect(thresholdActivity(active)).toEqual(active);
+    expect(
+      thresholdActivity({ ...active, active7d: 4, active30d: 36, idle90d: 0 }),
+    ).toMatchObject({ active7d: null, active30d: null, idle90d: null });
+    expect(
+      thresholdActivity({ ...active, active7d: 5, active30d: 35, idle90d: 5 }),
+    ).toMatchObject({ active7d: 5, active30d: 35, idle90d: 5 });
+    // With fewer than 2K consenting accounts every count is withheld.
+    expect(
+      thresholdActivity({ ...active, accounts: 9, active7d: 5, active30d: 5, idle90d: 4 }),
+    ).toMatchObject({ active7d: null, active30d: null, idle90d: null });
+    expect(thresholdActivity(validCensus)).toEqual(validCensus);
+    // Read time: rows without the 0005 flag never expose activity keys.
+    expect(
+      publicCensus({ ...validCensus, activityReported: null, active7d: 50, active30d: null, idle90d: null }),
+    ).toEqual(validCensus);
+    expect(publicCensus({ ...active, activityReported: 1, active7d: 3 })).toEqual({
+      ...active,
+      active7d: null,
+    });
+  });
+  it("stores withheld counts as NULL at ingest and serves them as null", async () => {
+    const GLIMPSE = await snapshotBinding();
+    expect(
+      await GLIMPSE.snapshot({ ...active, generation: 30, active7d: 3, active30d: 9, idle90d: 28 }),
+    ).toEqual({ accepted: true });
+    expect(await storedActivity()).toEqual({
+      activityReported: 1,
+      active7d: null,
+      active30d: 9,
+      idle90d: 28,
+    });
+    const served = await servedCensus();
+    expect(served.pendingMigrations).toBeUndefined();
+    expect(served.census[0]).toMatchObject({ accounts: 40, active7d: null, active30d: 9, idle90d: 28 });
+    expect(served.census[0]).not.toHaveProperty("activityReported");
+    // The database refuses a small count even if the Worker's threshold were bypassed.
+    const db = await mf.getD1Database("DB", "collector");
+    await expect(
+      db.prepare("UPDATE daily_census SET active7d=3 WHERE day=?").bind(today).run(),
+    ).rejects.toThrow(/CHECK/);
+  });
+  it("re-applies the threshold at read time to stored values", async () => {
+    const db = await mf.getD1Database("DB", "collector");
+    // A row stored without the complement rule: 9 of 12 leaves 3 accounts outside the count.
+    await db
+      .prepare("UPDATE daily_census SET accounts=12, active30d=9, idle90d=NULL WHERE day=?")
+      .bind(today)
+      .run();
+    expect((await servedCensus()).census[0]).toMatchObject({
+      accounts: 12,
+      active7d: null,
+      active30d: null,
+      idle90d: null,
+    });
+  });
+  it("clears activity counts when a later same-day snapshot comes from an older OpenZCAD", async () => {
+    const GLIMPSE = await snapshotBinding();
+    expect(await GLIMPSE.snapshot({ ...validCensus, generation: 31 })).toEqual({ accepted: true });
+    expect(await storedActivity()).toEqual({
+      activityReported: null,
+      active7d: null,
+      active30d: null,
+      idle90d: null,
+    });
+    const row = (await servedCensus()).census[0];
+    for (const k of ACTIVITY_FIELDS) expect(row).not.toHaveProperty(k);
+  });
 });

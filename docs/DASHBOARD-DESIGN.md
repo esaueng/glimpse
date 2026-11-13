@@ -6,7 +6,7 @@ gradients, tracking or fetched fonts (system sans and monospace stacks only,
 within the existing `style-src 'self'` policy).
 
 Top bar: Glimpse mark, segmented navigation (Overview, Issues, Storage,
-Privacy), access label. Toolbar, one row: page title, timeframe picker, app
+Cloudflare, Privacy), access label. Toolbar, one row: page title, timeframe picker, app
 select, last update and icon Refresh. Changes apply immediately. One
 applied-scope line states that basic counts cover all users and opt-in figures
 cover opted-in users only. Every opt-in panel carries an "Opted-in users" badge
@@ -31,26 +31,48 @@ Pages:
   explicit "Not collected" gap; opted-in cloud accounts, projects and revisions
   from the latest OpenZCAD snapshot with the change since the first snapshot in
   range; workspaces opened. Cloud growth as compact sparkline rows (accounts,
-  projects, revisions, stored bytes with start, end and change), activity by app with each app's
+  projects, revisions, stored bytes with start, end and change) and, under them, an
+  account-activity row from the latest snapshot (saved in the last 7 and 30 days,
+  no save for 90 days or more, each with its share of accounts), activity by app with each app's
   main outputs and its share of API requests, top CAD operations, feature
-  categories, OpenFEA workflow steps and solver backend, and part-count ranges.
+  categories (only those an app in scope can send), OpenFEA workflow steps and
+  solver backend, and model complexity: part-count ranges (OpenZCAD and OpenFEA)
+  and lattice cell-count ranges (OpenLattice3D), each with an N/A row when the
+  filter excludes its apps.
 - Issues: a six-cell stat strip of server errors with error rate, diagnostic codes, failed exports,
   solver runs and generations with failure rates, cloud request failures.
-  Daily server-error and diagnostic charts, ranked diagnostic codes, cloud
-  status ranking, slow-operation share (10 s or more) per timing event, the
+  Daily server-error and diagnostic charts, ranked diagnostic codes (all three
+  apps), cloud status ranking, slow-operation share (10 s or more) per timing
+  event (rows an app filter excludes are omitted), the
   local report inspector, and a collapsed table of every opt-in bucket.
 - Storage: stored bytes with change in range, project data, storage overhead,
   per-project and per-account averages, revisions and unknown-size artifacts;
   stored and project data over time; snapshot project-size ranges; saved,
-  upload and download size observations; cloud saves under 1 s; daily snapshot
+  upload and download size observations (OpenLattice3D: saved only, with an N/A
+  row for transfers and cloud saves); cloud saves under 1 s; daily snapshot
   history in a scrolling table.
+- Cloudflare: Esau infrastructure usage and costs, separate from application
+  analytics and read from the private `cf_*` tables (see
+  [CLOUDFLARE.md](CLOUDFLARE.md)). A stat strip of metered or allocated usage
+  cost, fixed subscriptions, projected metered cost and account budget
+  remaining; a "Needs attention" list of cost and collection alerts; daily
+  metered cost by product with its data table; product usage and cost;
+  applications with allocated costs and owner-editable app mappings and
+  budgets; resource usage and ownership; fixed subscriptions; budget
+  monitoring; and collection coverage per source with status and last
+  success. Until the monitor is configured it shows connection guidance
+  instead. Budget and app-mapping edits are sent to
+  `POST /api/cloudflare/settings` behind Access; the analytics pages are
+  read-only.
 - Privacy: unchanged collection boundaries and consent text.
 
 Palette: canvas #0a0f18, surface #111a28, sunken #0d1420, line #22304a, soft
-line #1c2840, control #2c3d5c, text #eef3fb, muted #9db0cc, faint #8396b3,
-accent and OpenZCAD #a9c9fa, OpenFEA #e8eef7, OpenLattice3D and second tone
-#6f95cf, third tone #3e5a85, warning #f6c177, error #ff8a9c (text #ffa3b1).
-Apps are told apart by lightness as well as hue. 28px page titles, 16–18px
+line #1c2840, control #53688f, text #eef3fb, muted #9db0cc, faint #8396b3,
+accent and OpenZCAD #a9c9fa, OpenFEA #e8eef7, OpenLattice3D #6f95cf, second tone
+#7aa6c2, third tone #5577aa, warning #f6c177, error #ff8a9c (text #ffa3b1).
+Control borders and every data tone reach at least 3:1 against the surface
+(WCAG 1.4.11). Apps are told apart by lightness as well as hue; stacked bars
+also carry visible values and legends, so no reading depends on color alone. 28px page titles, 16–18px
 section and panel titles, 26px tabular monospace strip values, 20px page gaps. 12px panel radii,
 6px control radii (squared buttons), 9px navigation group.
 
@@ -61,12 +83,18 @@ bars carry text values or an accessible label. No hover-only values, live
 animation or polling. Failed refresh keeps prior results and marks them stale.
 
 Empty, unavailable and unsupported stay distinct: "—" for not yet received,
-"N/A" with the owning app named when the filter excludes it, and "Not collected"
-for metrics Glimpse does not record.
+"N/A" with the owning app named when the filter excludes it (owners follow the
+per-app allowlist in `src/expanded.ts`; a panel with several measures shows an
+N/A row for each excluded one, after those that apply), and "Not collected"
+for metrics Glimpse does not record, or that the snapshot did not carry (the note
+says whether OpenZCAD did not send it or migration 0005 is pending). A count held
+back by the k-threshold shows "Withheld (fewer than 5)", never a number.
 
 Mobile (≤760px): navigation spans the width, the timeframe trigger and its
 popover span the width, stat strips reflow, wide tables scroll inside labelled regions, slow-
 operation bars move under their labels. No horizontal page overflow.
 
 Proposed metrics that are not collected yet are listed in
-[PROPOSED-METRICS.md](PROPOSED-METRICS.md) and are not rendered.
+[PROPOSED-METRICS.md](PROPOSED-METRICS.md) and are not rendered, except those
+implemented in Glimpse with app adapters pending, which render in their
+"Not collected" state until an app sends them.

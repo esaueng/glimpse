@@ -1,3 +1,4 @@
+import { APPS, dateRange } from "../src/contract";
 // Timeframe presets over UTC days. Glimpse stores daily aggregates, so the
 // smallest window is one UTC day and the largest is 90 days.
 export type Preset =
@@ -96,4 +97,93 @@ export function formatRange(from: string, to: string) {
       });
   if (from === to) return day(b, true);
   return `${day(a, a.getUTCFullYear() !== b.getUTCFullYear())} – ${day(b, true)}`;
+}
+
+/** The longest range the stats API accepts, in inclusive UTC days. */
+export const MAX_DAYS = 90;
+export const shiftDay = (day: string, days: number) =>
+  iso(Date.parse(day) + days * DAY);
+const todayIso = (now: Date) => iso(startOfDay(now));
+
+/** Why a custom range cannot be applied, or "" when it can. */
+export function customRangeError(from: string, to: string, now = new Date()) {
+  const valid = (s: string) =>
+    /^\d{4}-\d{2}-\d{2}$/.test(s) && !Number.isNaN(Date.parse(s));
+  if (!valid(from) || !valid(to)) return "Choose both dates.";
+  if (from > to) return "From must be on or before To.";
+  if (to > todayIso(now)) return "To cannot be later than today (UTC).";
+  const days = spanDays(from, to);
+  if (days > MAX_DAYS)
+    return `This range is ${days} days. Choose at most ${MAX_DAYS} days.`;
+  return "";
+}
+
+export type Scope = { app: string; from: string; to: string; preset?: Preset };
+export const scopeApps: readonly string[] = ["all", ...APPS];
+/** Query keys the dashboard owns; everything else (utm_*, cf_*) is preserved. */
+const OWN_KEYS = ["app", "range", "from", "to", "level", "view"];
+const quote = (value: string) =>
+  `“${value.length > 24 ? `${value.slice(0, 24)}…` : value}”`;
+
+/**
+ * Read the analytics scope from a query string. Only app, range, from and to
+ * are considered, so unrelated keys never reset the scope. Anything invalid
+ * falls back to a safe default and is described in `notice`.
+ */
+export function readScope(
+  search: string,
+  now = new Date(),
+): { scope: Scope; notice: string } {
+  const query = new URLSearchParams(search),
+    notices: string[] = [];
+  const rawApp = query.get("app") ?? "all";
+  const app = scopeApps.includes(rawApp) ? rawApp : "all";
+  if (app !== rawApp)
+    notices.push(`The app ${quote(rawApp)} in the link is unknown, so all apps are shown.`);
+  const fallback = (): Scope => ({ app, ...presetRange("30d", now), preset: "30d" });
+  const range = query.get("range"),
+    from = query.get("from"),
+    to = query.get("to");
+  let scope: Scope;
+  if (range !== null) {
+    if (isPreset(range)) scope = { app, ...presetRange(range, now), preset: range };
+    else {
+      notices.push(
+        `The timeframe ${quote(range)} in the link is unknown, so it was reset to the past 30 days.`,
+      );
+      scope = fallback();
+    }
+  } else if (from !== null || to !== null) {
+    const dates = new URLSearchParams();
+    if (from !== null) dates.set("from", from);
+    if (to !== null) dates.set("to", to);
+    const parsed = dateRange(dates, now);
+    if (parsed) scope = { app, from: parsed.from, to: parsed.to };
+    else {
+      notices.push(
+        `The timeframe in the link (${quote(from ?? "?")} to ${quote(to ?? "?")}) is not a valid range of at most ${MAX_DAYS} UTC days ending by today, so it was reset to the past 30 days.`,
+      );
+      scope = fallback();
+    }
+  } else scope = fallback();
+  return { scope, notice: notices.join(" ") };
+}
+
+/** Whether the stats API would accept this scope. */
+export const validScope = (scope: Scope, now = new Date()) =>
+  scopeApps.includes(scope.app) &&
+  dateRange(new URLSearchParams({ from: scope.from, to: scope.to }), now) !== null;
+
+/** Canonical query for a scope and view, keeping keys the dashboard does not own. */
+export function scopeSearch(scope: Scope, view: string, current = ""): string {
+  const query = new URLSearchParams({ app: scope.app });
+  if (scope.preset) query.set("range", scope.preset);
+  else {
+    query.set("from", scope.from);
+    query.set("to", scope.to);
+  }
+  query.set("view", view);
+  for (const [key, value] of new URLSearchParams(current))
+    if (!OWN_KEYS.includes(key)) query.append(key, value);
+  return `?${query}`;
 }

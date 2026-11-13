@@ -15,11 +15,13 @@ usage grant: the browser must store `granted-v2` after the updated notice. Old
 | Stored cloud bytes | Numeric metadata for retained R2 objects/assets/artifacts plus D1 document bytes without R2 pointers | Known bytes only; legacy artifacts with missing sizes are counted separately. Not Cloudflare billable disk usage, DB indexes, logs, backups or bandwidth |
 | Logical cloud bytes | Current documents, revisions, assets and artifacts before compression | Not a physical capacity total; retained R2 staging/orphan objects can make physical metadata exceed logical totals |
 | Cloud document size | Distribution of current `document_bytes` across those projects | Excludes external assets; do not call this complete project disk size |
-| Saved project size observations | Complete saved local project files in both apps | Repeated saves count repeatedly; app-specific scopes, not unique projects |
+| Saved project size observations | Complete saved local project files in all three apps (OpenLattice3D once its adapter ships) | Repeated saves count repeatedly; app-specific scopes, not unique projects |
 | Part observations | OpenZCAD body-node count after successful edits; OpenFEA display body count on a project-file save | Coarse ranges, repeatable observations; no part IDs, names or geometry |
 | Transfer observations | Successful OpenZCAD cloud JSON writes; OpenFEA encrypted backup upload/download | Size ranges and operation counts, not exact network bandwidth or billing |
-| Diagnostics | Fixed codes at explicit failure sites, plus generic runtime errors | Counts are signals, may overlap for one failure; no raw errors, stacks, URLs or automatic issue creation |
-| Feature operations | Exact allowlisted CAD command kinds; fixed FEA mesh/solve/export categories | No command labels, payloads or parameters |
+| Diagnostics | Fixed codes at explicit failure sites, plus generic runtime errors: `error_runtime`, `error_import`, `error_export`, `error_mesh` and `error_solver` (OpenFEA only), `error_cloud_save`, `error_cloud_load`, `error_storage`, `error_feature`, `error_render`. Also accepted, not yet sent by any app (privacy review approved 13 Nov 2026): `error_unresponsive` (main thread blocked 5 s or more), `error_gpu_lost`, `error_out_of_memory`, `error_worker`. OpenLattice3D: only `error_runtime`, `error_import`, `error_export`, `error_storage`, `error_render` and the four new codes ([ADR 0001](decisions/0001-openlattice3d-v2-parity.md)) | Counts are signals, may overlap for one failure; no raw errors, stacks, URLs or automatic issue creation |
+| Account activity | OpenZCAD accounts with the separate account-statistics grant: saved in the last 7 days, in the last 30 days, and no save for 90 days or more. Accepted, not yet sent (privacy review approved 13 Nov 2026) | Counts below 5, or leaving fewer than 5 accounts outside them, are withheld. Not people, visits or sessions |
+| Feature operations | Exact allowlisted CAD command kinds; fixed FEA mesh/solve/export categories; OpenLattice3D categories `create`, `import`, `export`, `measure`, `other` only | No command labels, payloads or parameters |
+| Lattice size | OpenLattice3D only: unit cells per successfully generated lattice, in `lt_1k`, `1k_10k`, `10k_100k`, `gte_100k`. Accepted, not yet sent ([ADR 0001](decisions/0001-openlattice3d-v2-parity.md)) | Repeatable observations, not models or people; the wide top range keeps rare very large lattices together; never the exact count or geometry |
 
 OpenFEA has no registered cloud-account system. Its encrypted recovery backups
 are not cloud accounts or a project inventory. Show **not supported**, rather
@@ -31,7 +33,47 @@ Cloud snapshots refresh on OpenZCAD’s existing hourly cron, plus on consent ch
 Snapshots use monotonically increasing app-wide generations to discard duplicate
 or out-of-order deliveries. Generations identify aggregate revisions, not users.
 After restoring an app database, reconcile its generation above the latest
-Glimpse generation before resuming; a restored lower counter is safely rejected.
+Glimpse generation before resuming; a restored lower counter is safely rejected, and `snapshot(...)` returns
+`{ accepted: false }` so the app can detect it.
+
+### Wire contract per app
+
+`record({ level: "optional", event, bucket })` accepts an expanded event only
+from the apps whose scope includes it (`expandedMetric` in
+[`src/expanded.ts`](../src/expanded.ts)):
+
+- **OpenZCAD:** every expanded event except `error_mesh`, `error_solver`,
+  `mesh_latency`, `solver_latency`, `solver_backend` and `lattice_cells`.
+- **OpenFEA:** every expanded event except `feature_operation`, `cloud_status`
+  and `lattice_cells`.
+- **OpenLattice3D** (ADR 0001 Option B, `LATTICE_EXPANDED`): the nine diagnostic
+  codes listed above, `export_latency`, `project_size`, `feature_category`
+  (`create`, `import`, `export`, `measure`, `other`) and `lattice_cells`. Nothing
+  else: no cloud statuses, transfers, cloud-save, mesh or solver timings, solver
+  backend, part counts, CAD operations or census. Its v1 events are unchanged.
+
+Local reports apply the same scope to their `app`.
+
+### Snapshot contract
+
+`snapshot(...)` accepts exactly `generation` plus the ten `CENSUS_FIELDS` in
+[`src/expanded.ts`](../src/expanded.ts) (`accounts`, `projects`, `revisions`,
+`storedBytes`, `logicalBytes`, `unknownArtifacts`, `lt1mib`, `mib1to10`,
+`mib10to100`, `gte100mib`), all non-negative safe integers, with the four size
+ranges summing to `projects`.
+
+Optionally, and only all together, it also accepts the `ACTIVITY_FIELDS`
+`active7d`, `active30d` and `idle90d` (privacy review approved 13 November 2026; see
+[PRIVACY.md](PRIVACY.md#review-additional-diagnostic-codes-and-account-activity)).
+Each is a non-negative integer no larger than `accounts`, or `null` when the app
+withholds it; `active7d` ≤ `active30d` and `active30d` + `idle90d` ≤ `accounts`.
+A snapshot without them stays valid, so older OpenZCAD versions keep working.
+Glimpse withholds any count below `ACTIVITY_MIN_COUNT` (5), or one that leaves
+fewer than 5 accounts outside it, and stores it as `NULL`. `/api/stats` returns
+the three keys only for snapshots that carried them: a number is a count, `null`
+is withheld, and an absent key is not collected. The columns come from
+migration `0005_census_activity.sql`; until it is applied, snapshots are stored
+without activity counts and `/api/stats` lists it in `pendingMigrations`.
 
 ## Consent and reports
 
@@ -97,8 +139,13 @@ limit retention, and never claim these aggregates are legally anonymous.
 Current main also supports OpenLattice3D and isolated authenticated Preview
 databases. This revision preserves those entrypoints, app filters, generation
 outcomes, tables, migrations and environment boundaries. The expanded v2 wire
-contract and local reports currently apply to OpenZCAD/OpenFEA only; other apps
-cannot send new detailed fields. Legacy failure outcomes remain visible as fixed
+contract and local reports apply in full to OpenZCAD/OpenFEA (each with its own
+scope) and, since the owner chose Option B of
+[ADR 0001](decisions/0001-openlattice3d-v2-parity.md) on 13 November 2026, to
+OpenLattice3D for a targeted subset only (see the wire contract above).
+OpenLattice3D sends that subset only after its own adapter and a new consent
+version and notice ship; until then its existing legacy scope is unchanged. No
+migration was needed. Legacy failure outcomes remain visible as fixed
 diagnostic categories, so one issue can produce both an outcome and a diagnostic
 signal. Preview environments need the new census migration too, with separate
 authorization; they never bind the production database or audience.

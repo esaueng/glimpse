@@ -1,22 +1,26 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { build } from "esbuild";
 import { Miniflare, convertV4MiniflareOptions } from "miniflare";
-import { readFileSync } from "node:fs";
+import { applyMigrations } from "./d1-migrations";
 import {
   allocate,
   alerts,
   billingPeriods,
   emptyData,
   forecast,
+  money,
   normalizeCharges,
   validRange,
   type Charge,
+  type CloudflareData,
 } from "../src/cloudflare/model";
 import {
   CloudflareClient,
   datasets,
+  graphqlFailure,
   usageRows,
 } from "../src/cloudflare/client";
+import { COLLECT_CRON, RETENTION_CRON } from "../src/schedule";
 import { cloudflareDemo } from "../web/cloudflare-demo";
 const now = new Date("2026-10-24T12:00:00Z");
 const period = {
@@ -298,15 +302,19 @@ beforeAll(async () => {
     stdin: {
       resolveDir: process.cwd(),
       contents: `
+    import worker from './src/index.ts';
     import { collect } from './src/cloudflare/collect';
     import { cloudflareApi } from './src/cloudflare/api';
-    let fail=false;
+    import { readData } from './src/cloudflare/store';
+    let fail=false, identity='Esau';
+    const hooks=[];
     const reply=result=>Response.json({success:true,result});
     const transport=async (url,init)=>{
-      const path=new URL(url).pathname;
+      const target=new URL(url), path=target.pathname;
+      if(target.hostname==='hooks.example.test'){hooks.push(JSON.parse(init.body).text);return new Response('ok');}
       if(path.endsWith('/graphql')) {
         const query=JSON.parse(init.body).query;
-        if(fail && query.includes('d1Analytics')) return Response.json({errors:[{message:'private provider detail'}]});
+        if(fail && query.includes('d1Analytics')) return Response.json({data:null,errors:[{message:'private provider detail: does not have access to the path',extensions:{code:'authz'}}]});
         const name=query.match(/metrics: (\\w+)/)[1];
         const defs={workersInvocationsAdaptive:['scriptName','app-a','sum',{requests:100,errors:1,cpuTimeUs:7000}],d1AnalyticsAdaptiveGroups:['databaseId','sample-db','sum',{rowsRead:200,rowsWritten:100}],d1StorageAdaptiveGroups:['databaseId','sample-db','max',{databaseSizeBytes:2048}],r2OperationsAdaptiveGroups:['bucketName','sample-bucket','sum',{requests:10}],r2StorageAdaptiveGroups:['bucketName','sample-bucket','max',{payloadSize:1024}],kvOperationsAdaptiveGroups:['namespaceId','sample-kv','sum',{requests:2}],durableObjectsInvocationsAdaptiveGroups:['namespaceId','sample-do','sum',{requests:3}],durableObjectsPeriodicGroups:['namespaceId','sample-do','sum',{duration:1000,rowsRead:0,rowsWritten:0}],containersUsageAdaptiveGroups:['applicationId','sample-container','sum',{cpuTimeSec:1,allocatedMemory:100,allocatedDisk:100,txBytes:1}],queueMessageOperationsAdaptiveGroups:['queueId','sample-queue','sum',{billableOperations:5}]};
         const [dimension,id,group,values]=defs[name];
@@ -314,7 +322,7 @@ beforeAll(async () => {
       }
       if(path.endsWith('/settings')) return reply({bindings:[{type:'d1',id:'sample-db'},{type:'plain_text',name:'DO_NOT_STORE',text:'private-config'}]});
       const map={
-        '':{name:'Esau'},'/workers/scripts':[{id:'app-a'},{id:'app-b'}],'/pages/projects':[],
+        '':{name:identity},'/workers/scripts':[{id:'app-a'},{id:'app-b'}],'/pages/projects':[],
         '/d1/database':[{uuid:'sample-db',name:'sample-db'}],'/r2/buckets':{buckets:[{name:'sample-bucket'}]},
         '/storage/kv/namespaces':[{id:'sample-kv',title:'sample-kv'}],'/workers/durable_objects/namespaces':[{id:'sample-do',name:'sample-do',script:'app-a'}],
         '/containers/applications':[{id:'sample-container',name:'app-a-container'}],'/queues':[{queue_id:'sample-queue',queue_name:'app-a-queue'}],
@@ -326,9 +334,26 @@ beforeAll(async () => {
       return reply(map[suffix]);
     };
     export default {async fetch(request,env){
-      const path=new URL(request.url).pathname;
-      if(path==='/_test/collect'){await collect(env,new Date('2026-10-24T12:00:00Z'),transport);return new Response('ok');}
-      if(path==='/_test/fail'){fail=true;return new Response('ok');}
+      const url=new URL(request.url), path=url.pathname;
+      const at=url.searchParams.get('at')||'2026-10-24T12:00:00Z';
+      const target=url.searchParams.has('webhook')?{...env,CF_ALERT_WEBHOOK:'https://hooks.example.test/alerts'}:env;
+      if(path==='/_test/collect'){try{await collect(target,new Date(at),transport);}catch(e){return new Response(e.name,{status:500});}return new Response('ok');}
+      if(path==='/_test/fail'){fail=url.searchParams.get('on')!=='0';return new Response('ok');}
+      if(path==='/_test/identity'){identity=url.searchParams.get('name');return new Response('ok');}
+      if(path==='/_test/hooks'){return Response.json(hooks.splice(0));}
+      if(path==='/_test/read'){
+        const scoped=url.searchParams.has('unconfigured')?{...env,CF_MONITOR_ENABLED:'false'}:env;
+        return Response.json(await readData(scoped,{now:new Date(at),limit:Number(url.searchParams.get('limit'))||undefined,since:url.searchParams.get('since')||undefined}));
+      }
+      if(path==='/_test/cron'){
+        // Exercise the real scheduled handler; collection reaches the fake API via global fetch.
+        const original=globalThis.fetch;
+        globalThis.fetch=transport;
+        try{await worker.scheduled({cron:url.searchParams.get('cron')},env);}
+        catch(e){return new Response(e.name,{status:500});}
+        finally{globalThis.fetch=original;}
+        return new Response('ok');
+      }
       return cloudflareApi(request,env);
     }};
   `,
@@ -337,6 +362,7 @@ beforeAll(async () => {
     write: false,
     format: "esm",
     platform: "neutral",
+    external: ["cloudflare:workers"],
   });
   mf = new Miniflare(
     convertV4MiniflareOptions({
@@ -353,12 +379,8 @@ beforeAll(async () => {
     }),
   );
   const db = await mf.getD1Database("DB");
-  await db.exec(
-    readFileSync("migrations/0004_cloudflare.sql", "utf8")
-      .replace(/--[^\n]*/g, "")
-      .replace(/\n/g, " "),
-  );
-});
+  await applyMigrations(db);
+}, 30000);
 afterAll(async () => {
   await mf?.dispose();
 });
@@ -495,5 +517,279 @@ describe("Cloudflare collection and protected settings persistence", () => {
       ),
     ).toBe(true);
     expect(JSON.stringify(data)).not.toContain("private provider detail");
+  });
+});
+
+describe("Cloudflare monitor robustness", () => {
+  it("formats an invalid currency code as a plain number instead of throwing", () => {
+    expect(() => money(1500000, "bogus")).not.toThrow();
+    expect(money(1500000, "bogus")).toMatch(/1[.,]50 bogus$/);
+    expect(money(1500000, "x".repeat(500)).length).toBeLessThan(40);
+    expect(money(1500000, "USD")).toContain("1.50");
+  });
+  it("does not alert on unsupported datasets but still alerts on unavailable sources", () => {
+    const data: CloudflareData = {
+      ...emptyData(true, now),
+      coverage: [
+        {
+          source: "D1 usage · d1AnalyticsAdaptiveGroups",
+          status: "unsupported",
+          message: "Analytics dataset unavailable for this connection.",
+          checkedAt: now.toISOString(),
+          lastSuccess: null,
+        },
+        {
+          source: "Esau connection",
+          status: "unavailable",
+          message: "Permission unavailable or token expired.",
+          checkedAt: now.toISOString(),
+          lastSuccess: null,
+        },
+      ],
+    };
+    expect(alerts(data, now).map((a) => a.message)).toEqual([
+      "Esau connection: Permission unavailable or token expired.",
+    ]);
+  });
+  it("allocates multi-day charges from indexed usage within the charge window", async () => {
+    const [charge] = await normalizeCharges(
+      [
+        {
+          ...billingRow,
+          ChargePeriodStart: "2026-10-20T00:00:00Z",
+          ChargePeriodEnd: "2026-10-23T00:00:00Z",
+          ContractedCost: 3,
+        },
+      ],
+      [period],
+    );
+    const row = (day: string, resource: string, value: number) => ({
+      day,
+      resource,
+      metric: "rowsWritten",
+      value,
+      unit: "rows",
+      aggregation: "sum" as const,
+    });
+    const usage = [
+      row("2026-10-20", "D1:a", 1),
+      row("2026-10-21", "D1:b", 1),
+      row("2026-10-22", "D1:b", 1),
+      row("2026-10-23", "D1:a", 1000), // Outside the half-open charge window.
+    ];
+    const resources = ["a", "b"].map((id) => ({
+      id: `D1:${id}`,
+      nativeId: id,
+      name: id,
+      kind: "D1" as const,
+      app: `app-${id}`,
+      active: true,
+    }));
+    const allocated = allocate([charge!], usage, resources);
+    expect(allocated.get("app-a")).toBe(1000000);
+    expect(allocated.get("app-b")).toBe(2000000);
+    // Scale: thousands of charges against tens of thousands of usage rows stays fast.
+    const many = Array.from({ length: 3000 }, () => charge!);
+    const big = Array.from({ length: 40000 }, (_, i) =>
+      row(
+        `2026-10-${String(1 + (i % 28)).padStart(2, "0")}`,
+        `D1:${i % 2 ? "a" : "b"}`,
+        1,
+      ),
+    );
+    const started = performance.now();
+    allocate(many, big, resources);
+    expect(performance.now() - started).toBeLessThan(2000);
+  });
+  it("classifies only schema and entitlement GraphQL errors as unsupported", () => {
+    expect(
+      graphqlFailure([
+        {
+          message: "does not have access to the path",
+          extensions: { code: "authz" },
+        },
+      ]),
+    ).toBe("unsupported");
+    expect(graphqlFailure([{ message: 'unknown field "fooGroups"' }])).toBe(
+      "unsupported",
+    );
+    expect(
+      graphqlFailure([
+        { message: "rate limiter budget depleted, try again after 5 minutes" },
+      ]),
+    ).toBe("transient");
+    expect(graphqlFailure([{ message: "something unexpected" }])).toBe(
+      "failed",
+    );
+    expect(graphqlFailure([])).toBe("failed");
+  });
+  it("retries transient network errors and rate-limited GraphQL responses within the bounded policy", async () => {
+    let calls = 0;
+    const flaky = vi.fn(async () => {
+      if (++calls < 3) throw new TypeError("network");
+      return Response.json({ success: true, result: { name: "Esau" } });
+    });
+    const client = new CloudflareClient("a".repeat(32), "test-token", flaky);
+    await expect(client.accountRequest("")).resolves.toMatchObject({
+      result: { name: "Esau" },
+    });
+    expect(flaky).toHaveBeenCalledTimes(3);
+    const down = vi.fn(async (): Promise<Response> => {
+      throw new TypeError("network");
+    });
+    await expect(
+      new CloudflareClient("a".repeat(32), "test-token", down).accountRequest(
+        "",
+      ),
+    ).rejects.toMatchObject({ status: 0 });
+    expect(down).toHaveBeenCalledTimes(3);
+    const limited = vi.fn(async () =>
+      Response.json({ errors: [{ message: "rate limit exceeded" }] }),
+    );
+    await expect(
+      new CloudflareClient("a".repeat(32), "test-token", limited).graphql(
+        "metrics: x",
+        "2026-10-24",
+      ),
+    ).rejects.toMatchObject({ status: 429 });
+    expect(limited).toHaveBeenCalledTimes(3);
+  }, 15000);
+});
+describe("Cloudflare collection resilience", () => {
+  const state = async (key: string) => {
+    const db = await mf.getD1Database("DB");
+    const row = await db
+      .prepare("SELECT value FROM cf_state WHERE key=?")
+      .bind(key)
+      .first<{ value: string }>();
+    return row ? JSON.parse(row.value) : null;
+  };
+  it("keeps backfilling past an unsupported dataset and sends no alert for it", async () => {
+    // The previous suite left the D1 analytics dataset failing as unsupported.
+    const unsupported = "backfillAge:d1AnalyticsAdaptiveGroups";
+    const before = await state(unsupported);
+    const other = await state("backfillAge:workersInvocationsAdaptive");
+    expect(
+      await (
+        await mf.dispatchFetch("https://example.test/_test/collect?webhook=1")
+      ).text(),
+    ).toBe("ok");
+    expect(await state(unsupported)).toBe(before + 1);
+    expect(await state("backfillAge:workersInvocationsAdaptive")).toBe(
+      other + 1,
+    );
+    expect(
+      await (await mf.dispatchFetch("https://example.test/_test/hooks")).json(),
+    ).toEqual([]);
+    await mf.dispatchFetch("https://example.test/_test/fail?on=0");
+  });
+  it("still retains and alerts when the account identity check fails", async () => {
+    const db = await mf.getD1Database("DB");
+    await db
+      .prepare(
+        "INSERT INTO cf_usage(day,resource,metric,value,unit,aggregation) VALUES('2025-01-01','D1:sample-db','rowsRead',1,'rows','sum')",
+      )
+      .run();
+    const collected = await state("lastCollected");
+    await mf.dispatchFetch("https://example.test/_test/identity?name=Other");
+    expect(
+      await (
+        await mf.dispatchFetch(
+          "https://example.test/_test/collect?webhook=1&at=2026-10-24T13:00:00Z",
+        )
+      ).text(),
+    ).toBe("ok");
+    await mf.dispatchFetch("https://example.test/_test/identity?name=Esau");
+    const hooks = (await (
+      await mf.dispatchFetch("https://example.test/_test/hooks")
+    ).json()) as string[];
+    expect(hooks).toEqual([
+      "Glimpse · Esau connection: Collection failed; previous results retained.",
+    ]);
+    expect(
+      await db
+        .prepare("SELECT COUNT(*) AS n FROM cf_usage WHERE day='2025-01-01'")
+        .first(),
+    ).toEqual({ n: 0 });
+    expect(await state("lastCollected")).toBe(collected);
+  });
+  it("scopes and bounds monitor reads without failing the response", async () => {
+    const full = (await (
+      await mf.dispatchFetch("https://example.test/_test/read")
+    ).json()) as CloudflareData;
+    expect(full.usage.length).toBeGreaterThan(1);
+    expect(full.periods.length).toBeGreaterThan(0);
+    const recent = (await (
+      await mf.dispatchFetch("https://example.test/_test/read?since=2026-10-24")
+    ).json()) as CloudflareData;
+    expect(recent.usage.length).toBeGreaterThan(0);
+    expect(recent.usage.every((u) => u.day >= "2026-10-24")).toBe(true);
+    expect(recent.periods).toEqual(full.periods);
+    const bounded = (await (
+      await mf.dispatchFetch("https://example.test/_test/read?limit=12")
+    ).json()) as CloudflareData;
+    expect(bounded.usage.length).toBeLessThanOrEqual(12);
+    expect(
+      bounded.coverage.find((c) => c.source === "Usage history"),
+    ).toMatchObject({ status: "unavailable" });
+    expect(
+      (await mf.dispatchFetch("https://example.test/api/cloudflare?from=bogus"))
+        .status,
+    ).toBe(400);
+    expect(
+      (
+        await mf.dispatchFetch(
+          "https://example.test/api/cloudflare?from=2026-10-24",
+        )
+      ).status,
+    ).toBe(200);
+  });
+  it("dispatches the hourly cron to collection and the daily cron to retention with a heartbeat", async () => {
+    const started = new Date().toISOString();
+    const db = await mf.getD1Database("DB");
+    expect(
+      await (
+        await mf.dispatchFetch(
+          `https://example.test/_test/cron?cron=${encodeURIComponent(COLLECT_CRON)}`,
+        )
+      ).text(),
+    ).toBe("ok");
+    expect((await state("lastCollected")) >= started).toBe(true);
+    const expired = new Date(Date.now() - 90 * 86400000)
+      .toISOString()
+      .slice(0, 10);
+    await db
+      .prepare("INSERT INTO daily_counts VALUES(?,?,?,?,?,?)")
+      .bind(expired, "openfea", "basic", "api_request", "none", 3)
+      .run();
+    expect(
+      await (
+        await mf.dispatchFetch(
+          `https://example.test/_test/cron?cron=${encodeURIComponent(RETENTION_CRON)}`,
+        )
+      ).text(),
+    ).toBe("ok");
+    expect(
+      await db
+        .prepare("SELECT COUNT(*) AS n FROM daily_counts WHERE day=?")
+        .bind(expired)
+        .first(),
+    ).toEqual({ n: 0 });
+    const data = (await (
+      await mf.dispatchFetch("https://example.test/api/cloudflare")
+    ).json()) as CloudflareData;
+    const heartbeat = data.coverage.find(
+      (c) => c.source === "Analytics retention",
+    );
+    expect(heartbeat).toMatchObject({ status: "ok" });
+    expect(heartbeat!.lastSuccess! >= started).toBe(true);
+    // The heartbeat is readable even when the monitor itself is disabled.
+    const disabled = (await (
+      await mf.dispatchFetch("https://example.test/_test/read?unconfigured=1")
+    ).json()) as CloudflareData;
+    expect(disabled.configured).toBe(false);
+    expect(disabled.coverage.map((c) => c.source)).toEqual([
+      "Analytics retention",
+    ]);
   });
 });

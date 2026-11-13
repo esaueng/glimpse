@@ -8,6 +8,10 @@ export const TIMINGS = [
 ] as const;
 export const SIZES = ["lt_1mib", "1_10mib", "10_100mib", "gte_100mib"] as const;
 export const PARTS = ["0", "1", "2_10", "11_100", "gte_101"] as const;
+// Unit cells per generated lattice (OpenLattice3D only, ADR 0001 Option B). Decade ranges with a
+// deliberately wide, open top range: every lattice of 100,000 cells or more shares one range, so
+// the rare largest models never get a range of their own (docs/PRIVACY.md, ADR 0001 review).
+export const CELLS = ["lt_1k", "1k_10k", "10k_100k", "gte_100k"] as const;
 export const DIAGNOSTICS = [
   "error_runtime",
   "error_import",
@@ -19,6 +23,12 @@ export const DIAGNOSTICS = [
   "error_storage",
   "error_feature",
   "error_render",
+  // Privacy review approved 13 Nov 2026 (docs/PRIVACY.md). Accepted from OpenZCAD and OpenFEA
+  // like the codes above; nothing is collected until an app adapter sends them.
+  "error_unresponsive", // main thread blocked for 5 s or more
+  "error_gpu_lost", // WebGPU/WebGL device or context lost
+  "error_out_of_memory", // allocation failure or out-of-memory signal
+  "error_worker", // a Web Worker failed or terminated unexpectedly
 ] as const;
 export const CAD_OPERATIONS = [
   "transaction",
@@ -99,15 +109,57 @@ export const EXPANDED: Readonly<Record<string, readonly string[]>> = {
     "measure",
     "other",
   ],
+  lattice_cells: CELLS,
   ...Object.fromEntries(DIAGNOSTICS.map((event) => [event, ["none"]])),
 };
+/**
+ * OpenLattice3D's expanded subset (ADR 0001 Option B, accepted 13 Nov 2026): only events that
+ * describe what a browser-only lattice app does. Every other v2 event is rejected for it: the
+ * mesh, solver and cloud codes, transfers, cloud-save, mesh and solver timings, solver backend,
+ * part counts, CAD operations, cloud statuses and the census. `error_feature` is excluded too:
+ * OpenLattice3D has no feature tree, and a failed generation is already the v1 outcome
+ * `generation_failed`, with its cause in the codes below.
+ */
+export const LATTICE_DIAGNOSTICS = [
+  "error_runtime",
+  "error_import",
+  "error_export",
+  "error_storage",
+  "error_render",
+  "error_unresponsive",
+  "error_gpu_lost",
+  "error_out_of_memory",
+  "error_worker",
+] as const satisfies readonly (typeof DIAGNOSTICS)[number][];
+export const LATTICE_CATEGORIES = [
+  "create",
+  "import",
+  "export",
+  "measure",
+  "other",
+] as const;
+export const LATTICE_EXPANDED: Readonly<Record<string, readonly string[]>> = {
+  export_latency: TIMINGS,
+  project_size: SIZES,
+  feature_category: LATTICE_CATEGORIES,
+  lattice_cells: CELLS,
+  ...Object.fromEntries(LATTICE_DIAGNOSTICS.map((event) => [event, ["none"]])),
+};
+/** Apps that may send expanded (v2) metrics and local reports, each within its own scope. */
+export const EXPANDED_APPS = ["openzcad", "openfea", "openlattice3d"] as const;
 export function expandedMetric(
   event: unknown,
   bucket: unknown,
   app: string,
 ): boolean {
-  if (!["openzcad", "openfea"].includes(app)) return false;
   if (typeof event !== "string" || typeof bucket !== "string") return false;
+  if (app === "openlattice3d")
+    return (
+      Object.hasOwn(LATTICE_EXPANDED, event) &&
+      (LATTICE_EXPANDED[event]?.includes(bucket) ?? false)
+    );
+  if (!["openzcad", "openfea"].includes(app) || event === "lattice_cells")
+    return false;
   if (
     app === "openzcad" &&
     [
@@ -131,7 +183,7 @@ export function expandedMetric(
 }
 export type Report = {
   schema: 2;
-  app: "openzcad" | "openfea";
+  app: (typeof EXPANDED_APPS)[number];
   rows: { event: string; bucket: string; count: number }[];
 };
 export function parseReport(value: unknown): Report | null {
@@ -141,7 +193,7 @@ export function parseReport(value: unknown): Report | null {
     Object.keys(v).sort().join(",") !== "app,rows,schema" ||
     v.schema !== 2 ||
     typeof v.app !== "string" ||
-    !["openzcad", "openfea"].includes(v.app) ||
+    !(EXPANDED_APPS as readonly string[]).includes(v.app) ||
     !Array.isArray(v.rows) ||
     v.rows.length > 128
   )
@@ -151,9 +203,6 @@ export function parseReport(value: unknown): Report | null {
     if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
     const r = raw as Record<string, unknown>;
     if (
-      !r ||
-      typeof r !== "object" ||
-      Array.isArray(r) ||
       Object.keys(r).sort().join(",") !== "bucket,count,event" ||
       typeof r.event !== "string" ||
       typeof r.bucket !== "string" ||
@@ -182,10 +231,32 @@ export const CENSUS_FIELDS = [
   "mib10to100",
   "gte100mib",
 ] as const;
+// Optional account-activity counts (migration 0005). Privacy review approved 13 Nov 2026.
+// All three arrive together or not at all, so older OpenZCAD versions keep working.
+export const ACTIVITY_FIELDS = ["active7d", "active30d", "idle90d"] as const;
+export type ActivityField = (typeof ACTIVITY_FIELDS)[number];
+/**
+ * Minimum count (k) for an activity field. A count below K, or one that leaves fewer
+ * than K consenting accounts outside it (that complement is derivable from `accounts`),
+ * is withheld: stored and served as null, never as the raw value. Migration 0005 also
+ * rejects stored values below 5 in the database, so K may be raised here but not lowered
+ * without a new migration and privacy review.
+ */
+export const ACTIVITY_MIN_COUNT = 5;
+/**
+ * Present (all three keys) when the snapshot carried activity counts; null means withheld.
+ * Absent means not collected: an older OpenZCAD, or migration 0005 not yet applied.
+ */
+export type Activity = Record<ActivityField, number | null>;
 export type Census = Record<(typeof CENSUS_FIELDS)[number], number> & {
   generation: number;
-};
+} & Partial<Activity>;
 export type CensusRow = Census & { day: string; app: "openzcad" };
+const isCount = (value: unknown): value is number =>
+  typeof value === "number" &&
+  Number.isSafeInteger(value) &&
+  value >= 0 &&
+  value <= 1000000000000000;
 export function census(value: unknown, app: string): Census | null {
   if (
     app !== "openzcad" ||
@@ -195,25 +266,75 @@ export function census(value: unknown, app: string): Census | null {
   )
     return null;
   const v = value as Record<string, unknown>;
-  const keys = [...CENSUS_FIELDS, "generation"];
+  const base = ["generation", ...CENSUS_FIELDS] as const;
+  const activity = ACTIVITY_FIELDS.some((k) => Object.hasOwn(v, k));
+  const keys: readonly string[] = activity ? [...base, ...ACTIVITY_FIELDS] : base;
   if (
     Object.keys(v).length !== keys.length ||
-    keys.some(
-      (k) =>
-        !Object.hasOwn(v, k) ||
-        typeof v[k] !== "number" ||
-        !Number.isSafeInteger(v[k]) ||
-        v[k] < 0 ||
-        v[k] > 1000000000000000,
-    )
+    keys.some((k) => !Object.hasOwn(v, k)) ||
+    base.some((k) => !isCount(v[k]))
   )
     return null;
-  const c = v as Census;
+  const c = Object.fromEntries(base.map((k) => [k, v[k]])) as Census;
   if (
     c.generation < 1 ||
     c.projects !== c.lt1mib + c.mib1to10 + c.mib10to100 + c.gte100mib ||
     (c.accounts === 0 && CENSUS_FIELDS.some((k) => c[k] !== 0))
   )
     return null;
-  return { ...c };
+  if (!activity) return c;
+  // The app may already withhold a field (null). Numbers are bounded by the consenting
+  // account total and must be consistent: a 7-day saver is also a 30-day saver, and an
+  // account with a save in the last 30 days has not gone 90 days without one.
+  const a = {} as Activity;
+  for (const k of ACTIVITY_FIELDS) {
+    const n = v[k];
+    if (n !== null && !(isCount(n) && n <= c.accounts)) return null;
+    a[k] = n;
+  }
+  if (
+    (a.active7d !== null && a.active30d !== null && a.active7d > a.active30d) ||
+    (a.active30d !== null &&
+      a.idle90d !== null &&
+      a.active30d + a.idle90d > c.accounts)
+  )
+    return null;
+  return { ...c, ...a };
+}
+/** The k-threshold for one activity count against its snapshot's consenting-account total. */
+export function withheld(value: number, accounts: number): boolean {
+  return value < ACTIVITY_MIN_COUNT || accounts - value < ACTIVITY_MIN_COUNT;
+}
+/**
+ * Applies the k-threshold to a validated snapshot (at ingest) and to a stored row (at
+ * read time, defensively). A field that is not a safe integer stays withheld (null). A
+ * snapshot without activity fields is returned unchanged.
+ */
+export function thresholdActivity<T extends Partial<Activity> & { accounts: number }>(
+  row: T,
+): T {
+  if (!ACTIVITY_FIELDS.some((k) => Object.hasOwn(row, k))) return row;
+  const result = { ...row };
+  for (const k of ACTIVITY_FIELDS) {
+    const n = row[k];
+    result[k] = (
+      typeof n === "number" && Number.isSafeInteger(n) && !withheld(n, row.accounts)
+        ? n
+        : null
+    ) as T[typeof k];
+  }
+  return result;
+}
+/**
+ * Shapes a stored `daily_census` row for /api/stats. `activityReported` marks rows whose
+ * snapshot carried activity counts. Without it (older snapshots, or migration 0005 not
+ * applied) the activity keys are dropped, which the dashboard shows as "Not collected".
+ */
+export function publicCensus(row: Record<string, unknown>): CensusRow {
+  const { activityReported, ...rest } = row;
+  if (activityReported !== 1) {
+    for (const k of ACTIVITY_FIELDS) delete rest[k];
+    return rest as CensusRow;
+  }
+  return thresholdActivity(rest as CensusRow);
 }

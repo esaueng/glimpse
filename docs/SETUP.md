@@ -5,14 +5,14 @@ Target: the existing Esau Cloudflare account that hosts `openzcad`, `openfea` an
 1. Install with `npm ci`. The dedicated `glimpse` D1 database now exists in the Esau account and its ID is configured in `wrangler.jsonc`. The owner authorized initial setup; `0001_aggregates.sql` is applied and the dashboard is deployed. For future authorized migrations, authenticate Wrangler for this account and run `npx wrangler d1 migrations apply DB --remote`. Future production migrations still require authorization. Local simulation uses `--local`. When recreating this setup elsewhere, create a separate database with `npx wrangler d1 create glimpse` and update its ID; do not reuse an application database.
 2. The primary hostname is `glimpse.esau.app`, attached to Worker `glimpse` for Production only. Its hostname-specific Cloudflare Access application, `Glimpse`, has one Allow policy: the existing `Internal admin tools - Cloudflare` policy (exact owner email **AND** Login Methods = Cloudflare). Only Cloudflare is selected as an available identity provider; One-time PIN, WARP authentication, bypass policies and broad account-member policies are not attached. The current owner identity was checked against the verified Cloudflare profile; do not put the email in this repository. Reusing this policy does not modify the six other applications already using it. `ACCESS_ISSUER` and `ACCESS_AUD` match the live team and this application's audience, and the custom-domain route is checked in. These are public token-validation configuration, not credentials. Keep production `workers_dev` disabled. Preview URLs are enabled only behind the separate `Glimpse previews` Access application described below. When recreating the application, update the audience from its Additional settings and run `npm run types`; protect the hostname before attaching its route. Do not broaden the policy when deploying.
 3. Confirm Access policies and logging/retention for app Workers, edge, Access, D1 backups. Glimpse logging/tracing is disabled. Do not enable raw request or telemetry-body logging. Verify that the intended audience/countries and controller notices support Basic server counters; opt-in remains required for Optional mode regardless of any local analytics exemption.
-4. With authorization, deploy Glimpse using `npx wrangler deploy`. The three RPC entrypoints are `OpenZCADIngest`, `OpenFEAIngest` and `OpenLattice3DIngest`. They bind a caller to its app; there is no HTTP ingestion route. The default HTTP handler protects both assets and `/api/stats`, validates the Access JWT itself, and fails closed for missing configuration. `/healthz` is a data-free liveness response in the Worker; the hostname-wide Access application still requires authentication before any path reaches the Worker.
+4. Before deploying, with authorization, apply pending migrations: `npx wrangler d1 migrations list DB --remote` lists them (and `wrangler.preview-migrations.jsonc` for Preview). Main deploys automatically, so apply a migration before merging code that needs it. The Worker guards this at run time: `/api/stats` (needs `0001`–`0003`) and `/api/cloudflare` (needs `0004`) read Wrangler's `d1_migrations` ledger and return a 503 naming any missing migration; ingestion RPC is not guarded. `0005_census_activity.sql` is optional for this guard: until it is applied, `/api/stats` keeps serving and lists it in `pendingMigrations` (see [Account activity counts](#account-activity-counts-migration-0005)). Every new migration must be added to `REQUIRED_MIGRATIONS` in `src/migrations.ts`; a test fails otherwise. Then, with authorization, deploy Glimpse using `npx wrangler deploy`. The three RPC entrypoints are `OpenZCADIngest`, `OpenFEAIngest` and `OpenLattice3DIngest`. They bind a caller to its app; there is no HTTP ingestion route. The default HTTP handler protects both assets and `/api/stats`, validates the Access JWT itself, and fails closed for missing configuration. `/healthz` is a data-free liveness response in the Worker; the hostname-wide Access application still requires authentication before any path reaches the Worker.
 5. Review and deploy the app integration PRs **after the service exists**. Each needs a `GLIMPSE` service binding to its own entrypoint and a global optional-ingress rate limiter. Both `GLIMPSE_BASIC_ENABLED` and `GLIMPSE_USAGE_ENABLED` start as `false`; keep preview/self-hosted configurations off unless deliberately configured. These flags are independent. Enable Basic only after the deployment-specific review; enable Optional only when notices and consent controls are ready. Browser consent is still required in addition to the Optional deployment switch.
 6. Check without consent that no `/api/glimpse/usage` request occurs. Exercise known API operations and verify Basic counts. Opt in separately in each app, perform exports/solver/feature actions, and verify Optional app-separated counts. Withdraw while an operation is pending and verify subsequent actions cause no optional sends. Reopen and test cross-tab withdrawal. Verify unconfigured/self-hosted deployments work without Glimpse.
-7. Confirm unauthenticated dashboard and API requests return 401 (or the Access login redirect), authorized requests show counts, app/date/level filters isolate rows, and retention removes expired aggregates. Recheck the daily retention cron and infrastructure backups after 90 days or with controlled staging fixtures.
+7. Confirm unauthenticated dashboard and API requests return 401 (or the Access login redirect; 503 only if the Access signing-key endpoint is unavailable, or for an authenticated API request while a required migration is missing), authorized requests show counts, app/date/level filters isolate rows, and retention removes expired aggregates. Recheck the daily retention cron and infrastructure backups after 90 days or with controlled staging fixtures.
 
 ## Ingestion contract
 
-`record({ level, event, bucket })` accepts exactly those three keys. No client timestamp, count, dimensions, request/response body, URLs, identifiers or error text. Each accepted call adds one to the receipt day's aggregate. Basic: `api_request`, `api_error`, `api_latency`. Optional: `workspace_opened`, `export_completed`, `export_failed`, `solver_completed`, `solver_failed`, `generation_completed`, `generation_failed`, `workflow_model`, `workflow_mesh`, `workflow_setup`, `workflow_run`, `workflow_results`, `feature_used`, `operation_latency`. OpenZCAD rejects solver/FEA-only steps. Generation events are exclusive to OpenLattice3D. Its Optional allowlist is limited to workspace opens, exports, generation outcomes and operation latency; FEA workflow and solver events are rejected. Non-timing events require `bucket: none`; timing events require one of `lt_100ms`, `100ms_1s`, `1s_10s`, `10s_60s`, `gte_60s`.
+`record({ level, event, bucket })` accepts exactly those three keys. No client timestamp, count, dimensions, request/response body, URLs, identifiers or error text. Each accepted call adds one to the receipt day's aggregate. Basic: `api_request`, `api_error`, `api_latency`. Optional: `workspace_opened`, `export_completed`, `export_failed`, `solver_completed`, `solver_failed`, `generation_completed`, `generation_failed`, `workflow_model`, `workflow_mesh`, `workflow_setup`, `workflow_run`, `workflow_results`, `feature_used`, `operation_latency`. OpenZCAD rejects solver/FEA-only steps. Generation events are exclusive to OpenLattice3D. Its v1 Optional allowlist is limited to workspace opens, exports, generation outcomes and operation latency; FEA workflow and solver events are rejected. Its expanded events are the targeted subset of [ADR 0001](decisions/0001-openlattice3d-v2-parity.md) (`LATTICE_EXPANDED` in `src/expanded.ts`; see [EXPANDED-ANALYTICS.md](EXPANDED-ANALYTICS.md#wire-contract-per-app)). Non-timing events require `bucket: none`; timing events require one of `lt_100ms`, `100ms_1s`, `1s_10s`, `10s_60s`, `gte_60s`.
 
 The app relay accepts only `event` and `bucket`; it never accepts Basic client events. Metrics are best effort and can undercount on outages, in-flight request cancellation, or rate limits. Allowed events can be spoofed by custom clients. There is no deduplication identifier or delivery retry. Do not use these statistics for billing or individual decisions.
 
@@ -44,6 +44,36 @@ authorize migrations separately; deploy the reviewed service before app
 integrations. All expanded metrics remain optional and old browser
 grants require a fresh choice; cloud account statistics require a separate grant.
 
+## Account activity counts (migration 0005)
+
+Privacy review approved 13 November 2026. `0005_census_activity.sql` adds nullable
+`daily_census` columns for OpenZCAD's optional account-activity counts (see the
+[privacy review](PRIVACY.md#review-additional-diagnostic-codes-and-account-activity)).
+No application of it is recorded. Unlike `0001`–`0004`, it is optional for the
+pending-migration guard, so the Worker may be deployed first:
+
+- Before `0005`: `/api/stats` serves all existing analytics and returns
+  `"pendingMigrations": ["0005_census_activity.sql"]` for opt-in reads. OpenZCAD
+  snapshots are still accepted; any activity counts in them are dropped (a
+  warning naming the migration is logged, no data). The dashboard shows the
+  counts as "Not collected · Glimpse migration 0005 not applied".
+- After `0005`: snapshots that carry the counts store them, with counts below
+  5 (or leaving fewer than 5 accounts outside them) stored as `NULL`. Earlier
+  rows stay "Not collected".
+
+With authorization, after the owner approves the review and before the OpenZCAD
+adapter that sends the counts is enabled:
+
+```sh
+npx wrangler d1 migrations apply PREVIEW_DB --remote --config wrangler.preview-migrations.jsonc
+npx wrangler d1 migrations apply DB --remote
+```
+
+Check that `npx wrangler d1 migrations list DB --remote` no longer lists `0005`,
+and that an opt-in `/api/stats` read has no `pendingMigrations`. Rollback: the
+columns are additive and nullable; leave them in place and stop the adapter
+sending the counts. Record the result in the [validation ledger](VALIDATION.md).
+
 ## OpenLattice3D rollout
 
 The third-app change includes `0002_openlattice3d.sql`; it is now applied to Production and the isolated Preview database. The migration rebuilds the app CHECK constraint, copying all seven existing columns, counts and primary keys unchanged. The local Worker/D1 regression upgrades a populated v1 database and verifies preservation, RPC app isolation, rejection of unknown app values and combined reads.
@@ -65,7 +95,7 @@ Rollback by disabling the app flags first. The expanded schema accepts old app v
 
 `Glimpse previews` is a separate Access application scoped to **glimpse → A Worker's preview URLs**, including new branches. It reuses the existing `Internal admin tools - Cloudflare` policy, without editing that shared policy: exact owner identity AND Cloudflare login. Cloudflare is the sole available identity provider; all-provider acceptance and Cloudflare One Client authentication remain off. It has its own AUD, configured only under `previews.vars`. Production tokens are rejected by the Preview Worker and Preview tokens by production. Production `workers_dev` stays disabled; `preview_urls` is enabled after the Preview Access policy exists. Do not reuse the production AUD or database for branch previews.
 
-All three Glimpse schema migrations are now applied to both Production and the dedicated Preview database, under separate rollout authorization. A separate migration configuration prevents the Preview command from accidentally targeting production, following [Cloudflare's D1 Preview guidance](https://developers.cloudflare.com/workers/previews/resources/#d1-migrations):
+Glimpse migrations `0001`–`0003` are recorded as applied to both Production and the dedicated Preview database, under separate rollout authorization. Whether `0004_cloudflare.sql` has been applied to either is not recorded, and `0005_census_activity.sql` is new, with no application recorded; see the [roadmap](ROADMAP.md#open-rollout-and-verification-items). A separate migration configuration prevents the Preview command from accidentally targeting production, following [Cloudflare's D1 Preview guidance](https://developers.cloudflare.com/workers/previews/resources/#d1-migrations):
 
 ```sh
 npx wrangler d1 migrations apply PREVIEW_DB --remote --config wrangler.preview-migrations.jsonc

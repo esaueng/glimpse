@@ -1,4 +1,5 @@
 import json
+import time
 from pathlib import Path
 from history_privacy import select_event
 import os
@@ -308,10 +309,19 @@ def main(publish=False):
         return bool(failures)
     finally:
         if report is not None:
-            request("/check-runs/" + str(report["id"]), method="PATCH", payload={
-                "status": "completed", "conclusion": "success" if passed else "failure",
-                "output": {"title": "Commit privacy result", "summary": "Public identity policy evaluated on the exact PR head; identifying values withheld."},
-            })
+            # A check left in_progress blocks the PR, so retry the final update a few
+            # times before giving up (a single transient API error stranded one run).
+            for attempt in range(3):
+                try:
+                    request("/check-runs/" + str(report["id"]), method="PATCH", payload={
+                        "status": "completed", "conclusion": "success" if passed else "failure",
+                        "output": {"title": "Commit privacy result", "summary": "Public identity policy evaluated on the exact PR head; identifying values withheld."},
+                    })
+                    break
+                except CheckError:
+                    if attempt == 2:
+                        raise
+                    time.sleep(2 * (attempt + 1))
 
 
 if __name__ == "__main__":

@@ -1,12 +1,7 @@
+import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { number, percent } from "./data";
-export const sizeLabels = ["<1 MiB", "1–10 MiB", "10–100 MiB", "≥100 MiB"];
-export const timingLabels = [
-  "<100 ms",
-  "100 ms–1 s",
-  "1–10 s",
-  "10–60 s",
-  "≥60 s",
-];
+import { sizeLabels, timingLabels } from "./labels";
+export { sizeLabels, timingLabels };
 export type Tone =
   | "accent"
   | "fea"
@@ -15,13 +10,15 @@ export type Tone =
   | "tone-3"
   | "warn"
   | "error";
-const color = (tone: Tone) => `var(--${tone})`;
-const shortDay = (day: string) =>
-  new Date(`${day}T00:00:00Z`).toLocaleDateString(undefined, {
-    day: "numeric",
-    month: "short",
-    timeZone: "UTC",
-  });
+export const color = (tone: Tone) => `var(--${tone})`;
+const dayFormat = new Intl.DateTimeFormat(undefined, {
+  day: "numeric",
+  month: "short",
+  timeZone: "UTC",
+});
+/** "12 Nov" for a UTC day such as 2026-11-12. */
+export const shortDay = (day: string) =>
+  dayFormat.format(new Date(`${day}T00:00:00Z`));
 function niceStep(span: number) {
   const raw = Math.max(span, 1) / 3,
     power = 10 ** Math.floor(Math.log10(raw)),
@@ -34,6 +31,87 @@ export type Series = {
   tone: Tone;
   dashed?: boolean;
 };
+/**
+ * Scrolling region for a table. Marks the edge where more columns are hidden
+ * and only takes keyboard focus when it actually scrolls.
+ */
+export function TableScroll({
+  label,
+  className = "",
+  children,
+}: {
+  label: string;
+  className?: string;
+  children: ReactNode;
+}) {
+  const ref = useRef<HTMLDivElement>(null),
+    [state, setState] = useState({ start: false, end: false, scrolls: false });
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const update = () => {
+      const max = el.scrollWidth - el.clientWidth,
+        next = {
+          start: max > 1 && el.scrollLeft > 1,
+          end: max > 1 && el.scrollLeft < max - 1,
+          scrolls: max > 1 || el.scrollHeight - el.clientHeight > 1,
+        };
+      setState((prior) =>
+        prior.start === next.start &&
+        prior.end === next.end &&
+        prior.scrolls === next.scrolls
+          ? prior
+          : next,
+      );
+    };
+    update();
+    el.addEventListener("scroll", update, { passive: true });
+    const observer = new ResizeObserver(update);
+    observer.observe(el);
+    if (el.firstElementChild) observer.observe(el.firstElementChild);
+    return () => {
+      el.removeEventListener("scroll", update);
+      observer.disconnect();
+    };
+  }, []);
+  return (
+    <>
+      {(state.start || state.end) && (
+        <p className="scroll-hint" aria-hidden="true">
+          Scroll sideways for more columns <span>→</span>
+        </p>
+      )}
+      <div
+        ref={ref}
+        className={`table-scroll ${className}`.trim()}
+        role="region"
+        aria-label={label}
+        tabIndex={state.scrolls ? 0 : undefined}
+        data-more-start={state.start || undefined}
+        data-more-end={state.end || undefined}
+      >
+        {children}
+      </div>
+    </>
+  );
+}
+/** A collapsed table of exact values; the summary names the chart it belongs to. */
+export function DataTable({
+  label,
+  children,
+}: {
+  label: string;
+  children: ReactNode;
+}) {
+  return (
+    <details className="data-disclosure">
+      <summary>
+        Data table<span className="sr-only">: {label}</span> · UTC
+      </summary>
+      <TableScroll label={`${label}: exact values`}>{children}</TableScroll>
+    </details>
+  );
+}
 // Fluid SVG line chart. Values and labels stay in HTML; the table is the exact alternative.
 export function LineChart({
   label,
@@ -70,6 +148,7 @@ export function LineChart({
   } while ((top - bottom) / step > 4 && (step *= 2));
   const ticks: number[] = [];
   for (let t = bottom + step; t <= top + step / 2; t += step) ticks.push(t);
+  const tickText = ticks.map(format);
   const x = (i: number) =>
       days.length > 1 ? (i / (days.length - 1)) * 1000 : 500,
     y = (v: number) => 190 - ((v - bottom) / (top - bottom)) * 180;
@@ -81,7 +160,13 @@ export function LineChart({
     peakIndex = first
       ? first.values.reduce((best, v, i, a) => (v > a[best]! ? i : best), 0)
       : 0;
-  const empty = !all.some((v) => v > 0);
+  const empty = !all.some((v) => v > 0),
+    // One UTC day has no line to draw: show points and say so in text.
+    single = days.length === 1;
+  const peakText =
+    first && days[peakIndex]
+      ? `Peak · ${shortDay(days[peakIndex])} · ${format(first.values[peakIndex] ?? 0)}`
+      : "";
   return (
     <figure className="line-chart">
       <div className="chart-plot" style={{ height }}>
@@ -90,9 +175,10 @@ export function LineChart({
           preserveAspectRatio="none"
           role="img"
           aria-label={`${label}. ${series
-            .map(
-              (s) =>
-                `${s.name} from ${format(s.values[0] ?? 0)} to ${format(s.values.at(-1) ?? 0)}`,
+            .map((s) =>
+              single
+                ? `${s.name} ${format(s.values[0] ?? 0)}`
+                : `${s.name} from ${format(s.values[0] ?? 0)} to ${format(s.values.at(-1) ?? 0)}`,
             )
             .join("; ")}. Exact values are in the data table.`}
         >
@@ -100,81 +186,104 @@ export function LineChart({
             <line key={t} className="grid-line" x1="0" x2="1000" y1={y(t)} y2={y(t)} />
           ))}
           <line className="axis-line" x1="0" x2="1000" y1="190" y2="190" />
-          {area && first && (
+          {!single && area && first && (
             <path
               d={`${path(first.values)} L1000,190 L0,190 Z`}
               style={{ fill: color(first.tone) }}
               className="area"
             />
           )}
-          {series.map((s) => (
-            <path
-              key={s.name}
-              d={path(s.values)}
-              className={s.dashed ? "series dashed" : "series"}
-              style={{ stroke: color(s.tone) }}
-            />
-          ))}
+          {!single &&
+            series.map((s) => (
+              <path
+                key={s.name}
+                d={path(s.values)}
+                className={s.dashed ? "series dashed" : "series"}
+                style={{ stroke: color(s.tone) }}
+              />
+            ))}
         </svg>
         <div className="tick-labels" aria-hidden="true">
-          {ticks.map((t) => (
+          {ticks.map((t, i) => (
             <span key={t} style={{ top: `calc(${(y(t) / 200) * 100}% - 15px)` }}>
-              {format(t)}
+              {tickText[i]}
             </span>
           ))}
         </div>
-        {peak && first && !empty && days.length > 1 && (
+        {single &&
+          !empty &&
+          series.map((s) => (
+            <i
+              key={s.name}
+              className="point"
+              aria-hidden="true"
+              style={{
+                left: "50%",
+                top: `${(y(s.values[0] ?? 0) / 200) * 100}%`,
+                borderColor: color(s.tone),
+              }}
+            />
+          ))}
+        {peak && first && !empty && !single && (
           <div
-            className="peak"
+            className={`peak ${x(peakIndex) < 500 ? "start" : "end"}`}
             aria-hidden="true"
-            style={{
-              left: `${x(peakIndex) / 10}%`,
-              top: `${(y(first.values[peakIndex]!) / 200) * 100}%`,
-            }}
+            style={
+              {
+                left: `${x(peakIndex) / 10}%`,
+                top: `${(y(first.values[peakIndex]!) / 200) * 100}%`,
+                "--x": x(peakIndex) / 10,
+                "--w": `calc(${peakText.length}ch + 16px)`,
+                "--gutter": `calc(${Math.max(0, ...tickText.map((t) => t.length))}ch + 8px)`,
+              } as CSSProperties
+            }
           >
             <i style={{ borderColor: color(first.tone) }} />
-            <span className={peakIndex > days.length * 0.75 ? "end" : undefined}>
-              <small>{shortDay(days[peakIndex]!)}</small>
-              {format(first.values[peakIndex]!)}
-            </span>
+            <span>{peakText}</span>
           </div>
         )}
         {empty && <p className="chart-empty">No data in this range.</p>}
       </div>
-      <div className="x-labels" aria-hidden="true">
-        {[...new Set([0, Math.floor((days.length - 1) / 2), days.length - 1])]
-          .filter((i) => i >= 0 && days[i])
-          .map((i) => (
-            <span key={i}>{shortDay(days[i]!)}</span>
-          ))}
-      </div>
-      <details className="data-disclosure">
-        <summary>Data table · UTC</summary>
-        <div className="table-scroll" tabIndex={0} role="region" aria-label={`${label} data`}>
-          <table>
-            <thead>
-              <tr>
-                <th>Date</th>
+      {single ? (
+        <p className="chart-single">
+          Single day · {shortDay(days[0]!)} ·{" "}
+          {series.map((s) => `${s.name} ${format(s.values[0] ?? 0)}`).join(" · ")}
+        </p>
+      ) : (
+        <div className="x-labels" aria-hidden="true">
+          {[...new Set([0, Math.floor((days.length - 1) / 2), days.length - 1])]
+            .filter((i) => i >= 0 && days[i])
+            .map((i) => (
+              <span key={i}>{shortDay(days[i]!)}</span>
+            ))}
+        </div>
+      )}
+      <DataTable label={label}>
+        <table>
+          <thead>
+            <tr>
+              <th>Date</th>
+              {series.map((s) => (
+                <th key={s.name} className="numeric">
+                  {s.name}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {days.map((day, i) => (
+              <tr key={day}>
+                <td className="nowrap">{day}</td>
                 {series.map((s) => (
-                  <th key={s.name}>{s.name}</th>
+                  <td key={s.name} className="numeric">
+                    {format(s.values[i] ?? 0)}
+                  </td>
                 ))}
               </tr>
-            </thead>
-            <tbody>
-              {days.map((day, i) => (
-                <tr key={day}>
-                  <td>{day}</td>
-                  {series.map((s) => (
-                    <td key={s.name} className="numeric">
-                      {format(s.values[i] ?? 0)}
-                    </td>
-                  ))}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </details>
+            ))}
+          </tbody>
+        </table>
+      </DataTable>
     </figure>
   );
 }
@@ -183,12 +292,14 @@ export function Sparkline({
   label,
   values,
   tone = "accent",
+  format = number,
 }: {
   label: string;
   values: number[];
   tone?: Tone;
+  format?: (value: number) => string;
 }) {
-  if (values.length < 2) return <span className="sparkline" aria-hidden="true" />;
+  if (!values.length) return <span className="sparkline" aria-hidden="true" />;
   const high = Math.max(...values),
     low = Math.min(...values),
     y = (v: number) => (high === low ? 12 : 21 - ((v - low) / (high - low)) * 18);
@@ -198,15 +309,45 @@ export function Sparkline({
       viewBox="0 0 100 24"
       preserveAspectRatio="none"
       role="img"
-      aria-label={`${label}: ${number(values[0]!)} to ${number(values.at(-1)!)}`}
+      aria-label={
+        values.length > 1
+          ? `${label}: ${format(values[0]!)} to ${format(values.at(-1)!)}`
+          : `${label}: ${format(values[0]!)}, one snapshot`
+      }
     >
-      <path
-        d={values
-          .map((v, i) => `${i ? "L" : "M"}${((i / (values.length - 1)) * 100).toFixed(2)},${y(v).toFixed(2)}`)
-          .join(" ")}
-        style={{ stroke: color(tone) }}
-      />
+      {values.length > 1 ? (
+        <path
+          d={values
+            .map((v, i) => `${i ? "L" : "M"}${((i / (values.length - 1)) * 100).toFixed(2)},${y(v).toFixed(2)}`)
+            .join(" ")}
+          style={{ stroke: color(tone) }}
+        />
+      ) : (
+        <path className="sparkline-dot" d="M50,12 L50,12" style={{ stroke: color(tone) }} />
+      )}
     </svg>
+  );
+}
+/** Colour key; it is real text so screen readers and forced colours keep it. */
+export function Legend({
+  items,
+  label,
+}: {
+  items: { name: string; tone: Tone; dashed?: boolean }[];
+  label?: string;
+}) {
+  return (
+    <ul className="legend" aria-label={label}>
+      {items.map((s) => (
+        <li key={s.name}>
+          <span
+            className={s.dashed ? "swatch dashed" : "swatch"}
+            style={{ background: color(s.tone) }}
+          />
+          {s.name}
+        </li>
+      ))}
+    </ul>
   );
 }
 export type Segment = { name: string; value: number; tone: Tone };
@@ -289,11 +430,13 @@ export function Columns({
   tone = "accent",
   show = "value",
   height = 120,
+  empty = "No data in this range.",
 }: {
   items: { label: string; value: number; tone?: Tone }[];
   tone?: Tone;
   show?: "value" | "share";
   height?: number;
+  empty?: string;
 }) {
   const max = Math.max(1, ...items.map((i) => i.value)),
     sum = items.reduce((n, i) => n + i.value, 0);
@@ -315,6 +458,6 @@ export function Columns({
       ))}
     </ol>
   ) : (
-    <p className="empty">No data in this range.</p>
+    <p className="empty">{empty}</p>
   );
 }

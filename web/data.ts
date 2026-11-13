@@ -1,24 +1,59 @@
 import { APPS, APP_NAMES, type App, type Row } from "../src/contract";
-import type { CensusRow } from "../src/expanded";
+import { withheld, type ActivityField, type CensusRow } from "../src/expanded";
 export type Range = { app: string; level: string; from: string; to: string };
 export type Stats = {
   range: Range;
   rows: Row[];
   census: CensusRow[];
+  /** Optional-schema migrations not yet applied (never blocking), e.g. 0005_census_activity.sql. */
+  pendingMigrations?: string[];
   receivedAt: string;
 };
+export type ActivityDisplay =
+  | { state: "value"; value: number }
+  | { state: "withheld" }
+  | { state: "not-collected" };
+/**
+ * One activity count from the latest snapshot. A missing key is "Not collected" (an older
+ * OpenZCAD, or migration 0005 pending); null is "Withheld" by the k-threshold. A number
+ * is re-checked against the threshold here as well, so a small value is never shown.
+ */
+export function activityValue(row: CensusRow, key: ActivityField): ActivityDisplay {
+  if (!Object.hasOwn(row, key)) return { state: "not-collected" };
+  const value = row[key];
+  return typeof value === "number" && !withheld(value, row.accounts)
+    ? { state: "value", value }
+    : { state: "withheld" };
+}
 export const appName = (app: string) =>
   APPS.includes(app as App) ? APP_NAMES[app as App] : "All apps";
-export const number = (value: number) => value.toLocaleString();
+// Formatters are created once; number() runs for every table cell and tick.
+const integer = new Intl.NumberFormat(),
+  fixed: Intl.NumberFormat[] = [0, 1, 2].map(
+    (digits) =>
+      new Intl.NumberFormat(undefined, {
+        minimumFractionDigits: digits,
+        maximumFractionDigits: digits,
+      }),
+  ),
+  upTo1 = new Intl.NumberFormat(undefined, { maximumFractionDigits: 1 });
+export const number = (value: number) => integer.format(value);
+/** Binary units with one fixed decimal below 100, so "7.0 GiB" sits beside "6.9 GiB". */
 export function bytes(value: number): string {
-  if (value < 1024) return `${number(value)} B`;
+  const magnitude = Math.abs(value);
+  if (magnitude < 1024) return `${number(value)} B`;
   const units = ["KiB", "MiB", "GiB", "TiB"];
   const index = Math.min(
     units.length - 1,
-    Math.floor(Math.log(value) / Math.log(1024)) - 1,
+    Math.floor(Math.log(magnitude) / Math.log(1024)) - 1,
   );
-  return `${(value / 1024 ** (index + 1)).toLocaleString(undefined, { maximumFractionDigits: 1 })} ${units[index]}`;
+  const scaled = value / 1024 ** (index + 1);
+  return `${fixed[Math.abs(scaled) < 99.95 ? 1 : 0]!.format(scaled)} ${units[index]}`;
 }
+/** Signed change with a true minus sign, e.g. "+12" or "−1.2 GiB". */
+export const signed = (n: number, format: (value: number) => string = number) =>
+  `${n < 0 ? "−" : "+"}${format(Math.abs(n))}`;
+export const ratio = (a: number, b: number) => (b ? upTo1.format(a / b) : "—");
 export function total(rows: Row[], event: string, app?: App): number {
   return rows.reduce(
     (n, r) => n + (r.event === event && (!app || r.app === app) ? r.count : 0),
@@ -83,7 +118,7 @@ export function dailySeries(data: Stats, event: string) {
 export type Loaded = { basic: Stats; optional: Stats };
 export const percent = (part: number, whole: number, digits = 1) =>
   whole
-    ? `${((part / whole) * 100).toLocaleString(undefined, { maximumFractionDigits: digits, minimumFractionDigits: digits })}%`
+    ? `${(fixed[digits] ?? new Intl.NumberFormat(undefined, { minimumFractionDigits: digits, maximumFractionDigits: digits })).format((part / whole) * 100)}%`
     : "—";
 export function bucketCounts(
   rows: Row[],
