@@ -86,7 +86,7 @@ recorded in the ledger:
 | Split `tsconfig` per runtime | One `tsconfig.json` covers `src`, `web` and `test` with both DOM and Node types, so Worker code can use browser globals without a type error. **Done on this branch (not deployed):** `tsconfig.worker.json` (Workers types only), `tsconfig.web.json` (DOM) and `tsconfig.node.json` (tests, scripts, Vite configs); `npm run typecheck` checks all three. No type errors surfaced in `src/` |
 | Freshness check for `worker-configuration.d.ts` | The generated file is committed; CI does not check that it matches `wrangler.jsonc` after `npm run types`. **Done on this branch (not deployed):** `npm run check:types` (in `npm run check` and CI) regenerates the types offline and diffs them; the committed file was stale against the installed workerd and was regenerated. Only the part derived from `wrangler.jsonc` is enforced; drift in the workerd runtime section after a Wrangler upgrade is a warning, so Dependabot updates still pass |
 | Component tests for `web/Cloudflare.tsx` and `web/views.tsx` | Current tests cover the Worker, data semantics, ranges, the demo and configuration, not rendered components |
-| Confirm where `.github/privacy` tests run | They run only in `history-privacy-request.yml` (pushes to any branch or tag, merge groups and fork pull requests), not in CI's `verify` job. Confirm this split is intended |
+| Confirm where `.github/privacy` tests run | They run only in `history-privacy-request.yml` (pushes to any branch or tag, merge groups and fork pull requests), not in CI's `verify` job. **Recommendation: keep as is.** That workflow already runs them on every push to any branch or tag, and on PR #31 they ran as `history-privacy-regressions`. Adding them to `verify` would bring back the duplicate runs that commit `f1c2ad4` removed on purpose. Owner to confirm |
 | Shared web hooks and one `Tile` | `web/views.tsx` and `web/Cloudflare.tsx` each define a `Tile`, and `web/Dashboard.tsx` and `web/Cloudflare.tsx` each keep their own loading and URL-state logic. Extract shared `useLoader`/`useUrlState` hooks and one `Tile` |
 
 ## Feature candidates
@@ -121,3 +121,15 @@ These follow from [PRIVACY.md](PRIVACY.md) and are not on the roadmap:
 
 Changing any of these needs a fresh design and consent review, as PRIVACY.md
 states.
+
+## Dependency updates
+
+Dependabot PR #31 (jose 6.2.15, vite 8.3.6, vitest 5.1.0, wrangler 4.157.0 /
+workerd 1.20261103.1; patch and minor only) passed verify, audit,
+dependency-review and the privacy checks. One `secret-scan` run failed because
+the gitleaks download returned HTTP 504, while a second `secret-scan` run
+passed. The download now retries for up to two minutes, and the archive is
+still checked against its checksum. **Recommendation:** rebase or re-run #31
+and merge it. After the workerd bump, `npm run check:types` reports a warning
+for the runtime section and does not fail; run `npm run types` in a follow-up.
+
