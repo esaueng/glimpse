@@ -59,6 +59,23 @@ export const diagnosticLabels: Record<(typeof DIAGNOSTICS)[number], string> = {
   error_storage: "Local storage",
   error_feature: "Feature",
   error_render: "Render",
+  error_unresponsive: "Unresponsive page",
+  error_gpu_lost: "GPU device lost",
+  error_out_of_memory: "Out of memory",
+  error_worker: "Background worker",
+};
+// Event names where "<label> error" would read badly.
+const diagnosticEventLabels: Partial<Record<(typeof DIAGNOSTICS)[number], string>> = {
+  error_unresponsive: "Page unresponsive (5 s or more)",
+  error_gpu_lost: "GPU device lost",
+  error_out_of_memory: "Out of memory",
+};
+/** What each diagnostic code means, for the title tooltip and the report inspector. */
+export const diagnosticHints: Partial<Record<(typeof DIAGNOSTICS)[number], string>> = {
+  error_unresponsive: "Main thread blocked for 5 s or more",
+  error_gpu_lost: "WebGPU or WebGL device or context lost",
+  error_out_of_memory: "Allocation failure or out-of-memory signal",
+  error_worker: "A Web Worker failed or stopped unexpectedly",
 };
 export const cloudStatusLabels: Record<string, string> = {
   unauthorized: "Unauthorized",
@@ -109,8 +126,10 @@ const bucketLabels: Record<string, string> = {
 };
 /** Readable name for an allowlisted event code, e.g. error_mesh → "Mesh error". */
 export function eventLabel(event: string): string {
-  if (event in diagnosticLabels)
-    return `${diagnosticLabels[event as keyof typeof diagnosticLabels]} error`;
+  if (event in diagnosticLabels) {
+    const code = event as keyof typeof diagnosticLabels;
+    return diagnosticEventLabels[code] ?? `${diagnosticLabels[code]} error`;
+  }
   return eventLabels[event] ?? event;
 }
 /** Readable name for a bucket of an event, e.g. 1s_10s → "1–10 s". */

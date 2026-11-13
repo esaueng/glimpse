@@ -38,7 +38,7 @@ D1 database, service bindings, ingestion, or credentials. Its files stay under
 ## Inside the dashboard
 
 - **Overview:** utilization — opted-in cloud accounts, projects, and revisions
-  with growth, workspaces opened, per-app activity, top CAD operations, feature
+  with growth, an account-activity row (not collected yet), workspaces opened, per-app activity, top CAD operations, feature
   categories, simulation workflow steps, and model complexity.
 - **Issues:** server errors, diagnostic codes, failed exports, solves, and
   generations, cloud request failures, slow operations, and a local JSON report
@@ -63,7 +63,14 @@ not collected yet are listed in [proposed metrics](docs/PROPOSED-METRICS.md).
 | --- | --- |
 | **OpenZCAD** | API counters; opt-in CAD operations, exports, diagnostics, size/part/transfer observations; cloud account and storage snapshots with separate account permission |
 | **OpenFEA** | API counters; opt-in mesh/solver/export outcomes, workflow steps, diagnostics, and size/part/transfer observations. No cloud account census |
-| **OpenLattice3D** | API counters; opt-in workspace opens, export and generation outcomes, and operation timing. Expanded v2 metrics and local reports do not apply |
+| **OpenLattice3D** | API counters; opt-in workspace opens, export and generation outcomes, and operation timing. Expanded v2 metrics and local reports do not apply; [ADR 0001](docs/decisions/0001-openlattice3d-v2-parity.md) proposes options for the owner |
+
+The service also accepts four more OpenZCAD/OpenFEA diagnostic codes and
+optional OpenZCAD account-activity counts (saved in the last 7 and 30 days, idle
+for 90 days or more; counts below 5 are withheld). Their privacy review is a
+draft pending owner approval and no app sends them yet, so the dashboard shows
+the activity counts as "Not collected"; see
+[proposed metrics](docs/PROPOSED-METRICS.md#implemented-in-glimpse-app-adapters-pending).
 
 Support in this repository does not establish that an integration is enabled or
 verified in production. The [validation ledger](docs/VALIDATION.md) records prior
@@ -189,7 +196,8 @@ not migrate or deploy anything.
 | [Roadmap](docs/ROADMAP.md) | Current state, open rollout checks, hygiene backlog, feature candidates and non-goals |
 | [Cloudflare monitor](docs/CLOUDFLARE.md) | Esau usage and cost collection, interpretation, budgets and rollout |
 | [Dashboard design](docs/DASHBOARD-DESIGN.md) | Interface behavior and measurement presentation |
-| [Proposed metrics](docs/PROPOSED-METRICS.md) | Candidate opt-in and snapshot metrics awaiting privacy review |
+| [Proposed metrics](docs/PROPOSED-METRICS.md) | Candidate opt-in and snapshot metrics awaiting privacy review, and those implemented in Glimpse with app adapters pending |
+| [Decisions](docs/decisions/) | Architecture decision records, such as [OpenLattice3D v2 parity](docs/decisions/0001-openlattice3d-v2-parity.md) |
 | [Brand](docs/BRAND.md) | Logo variants, palette, and icon exports |
 | [Public-source review](docs/PUBLICATION.md) | Bounded history review and ongoing commit/secret checks |
 

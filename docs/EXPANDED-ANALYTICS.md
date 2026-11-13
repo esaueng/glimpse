@@ -18,7 +18,8 @@ usage grant: the browser must store `granted-v2` after the updated notice. Old
 | Saved project size observations | Complete saved local project files in both apps | Repeated saves count repeatedly; app-specific scopes, not unique projects |
 | Part observations | OpenZCAD body-node count after successful edits; OpenFEA display body count on a project-file save | Coarse ranges, repeatable observations; no part IDs, names or geometry |
 | Transfer observations | Successful OpenZCAD cloud JSON writes; OpenFEA encrypted backup upload/download | Size ranges and operation counts, not exact network bandwidth or billing |
-| Diagnostics | Fixed codes at explicit failure sites, plus generic runtime errors | Counts are signals, may overlap for one failure; no raw errors, stacks, URLs or automatic issue creation |
+| Diagnostics | Fixed codes at explicit failure sites, plus generic runtime errors: `error_runtime`, `error_import`, `error_export`, `error_mesh` and `error_solver` (OpenFEA only), `error_cloud_save`, `error_cloud_load`, `error_storage`, `error_feature`, `error_render`. Also accepted, not yet sent by either app (draft review pending owner approval): `error_unresponsive` (main thread blocked 5 s or more), `error_gpu_lost`, `error_out_of_memory`, `error_worker` | Counts are signals, may overlap for one failure; no raw errors, stacks, URLs or automatic issue creation |
+| Account activity | OpenZCAD accounts with the separate account-statistics grant: saved in the last 7 days, in the last 30 days, and no save for 90 days or more. Accepted, not yet sent (draft review pending owner approval) | Counts below 5, or leaving fewer than 5 accounts outside them, are withheld. Not people, visits or sessions |
 | Feature operations | Exact allowlisted CAD command kinds; fixed FEA mesh/solve/export categories | No command labels, payloads or parameters |
 
 OpenFEA has no registered cloud-account system. Its encrypted recovery backups
@@ -33,6 +34,27 @@ or out-of-order deliveries. Generations identify aggregate revisions, not users.
 After restoring an app database, reconcile its generation above the latest
 Glimpse generation before resuming; a restored lower counter is safely rejected, and `snapshot(...)` returns
 `{ accepted: false }` so the app can detect it.
+
+### Snapshot contract
+
+`snapshot(...)` accepts exactly `generation` plus the ten `CENSUS_FIELDS` in
+[`src/expanded.ts`](../src/expanded.ts) (`accounts`, `projects`, `revisions`,
+`storedBytes`, `logicalBytes`, `unknownArtifacts`, `lt1mib`, `mib1to10`,
+`mib10to100`, `gte100mib`), all non-negative safe integers, with the four size
+ranges summing to `projects`.
+
+Optionally, and only all together, it also accepts the `ACTIVITY_FIELDS`
+`active7d`, `active30d` and `idle90d` (**Draft — pending owner approval**; see
+[PRIVACY.md](PRIVACY.md#draft-review-additional-diagnostic-codes-and-account-activity)).
+Each is a non-negative integer no larger than `accounts`, or `null` when the app
+withholds it; `active7d` ≤ `active30d` and `active30d` + `idle90d` ≤ `accounts`.
+A snapshot without them stays valid, so older OpenZCAD versions keep working.
+Glimpse withholds any count below `ACTIVITY_MIN_COUNT` (5), or one that leaves
+fewer than 5 accounts outside it, and stores it as `NULL`. `/api/stats` returns
+the three keys only for snapshots that carried them: a number is a count, `null`
+is withheld, and an absent key is not collected. The columns come from
+migration `0005_census_activity.sql`; until it is applied, snapshots are stored
+without activity counts and `/api/stats` lists it in `pendingMigrations`.
 
 ## Consent and reports
 
@@ -99,7 +121,9 @@ Current main also supports OpenLattice3D and isolated authenticated Preview
 databases. This revision preserves those entrypoints, app filters, generation
 outcomes, tables, migrations and environment boundaries. The expanded v2 wire
 contract and local reports currently apply to OpenZCAD/OpenFEA only; other apps
-cannot send new detailed fields. Legacy failure outcomes remain visible as fixed
+cannot send new detailed fields. Whether OpenLattice3D gets full parity, a
+targeted subset, or stays on v1 is an open owner decision:
+[ADR 0001](decisions/0001-openlattice3d-v2-parity.md). Legacy failure outcomes remain visible as fixed
 diagnostic categories, so one issue can produce both an outcome and a diagnostic
 signal. Preview environments need the new census migration too, with separate
 authorization; they never bind the production database or audience.

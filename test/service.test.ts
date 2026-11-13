@@ -3,7 +3,15 @@ import { build } from "esbuild";
 import { Miniflare, convertV4MiniflareOptions } from "miniflare";
 import { generateKeyPair, exportJWK, SignJWT } from "jose";
 import { applyMigration, applyMigrations, MIGRATION_FILES } from "./d1-migrations";
-import { census, parseReport } from "../src/expanded";
+import {
+  ACTIVITY_FIELDS,
+  ACTIVITY_MIN_COUNT,
+  census,
+  DIAGNOSTICS,
+  parseReport,
+  publicCensus,
+  thresholdActivity,
+} from "../src/expanded";
 import { dateRange, metric } from "../src/contract";
 let mf: Miniflare;
 let token: string;
@@ -634,7 +642,15 @@ describe("expanded analytics", () => {
       "mib1to10",
       "mib10to100",
       "gte100mib",
+      // 0005: nullable, so earlier rows and older OpenZCAD versions stay valid.
+      "activityReported",
+      "active7d",
+      "active30d",
+      "idle90d",
     ]);
+    // A snapshot without activity counts serves without the activity keys.
+    expect(Object.keys(optional.census[0]!)).not.toContain("active7d");
+    expect(Object.keys(optional.census[0]!)).not.toContain("activityReported");
   });
 });
 
@@ -659,7 +675,7 @@ it("rejects late snapshots across UTC days and purges expired snapshot metadata"
     .slice(0, 10);
   await db
     .prepare(
-      "INSERT INTO daily_census SELECT ?,app,generation,accounts,projects,revisions,storedBytes,logicalBytes,unknownArtifacts,lt1mib,mib1to10,mib10to100,gte100mib FROM daily_census WHERE day=?",
+      "INSERT INTO daily_census SELECT ?,app,generation,accounts,projects,revisions,storedBytes,logicalBytes,unknownArtifacts,lt1mib,mib1to10,mib10to100,gte100mib,activityReported,active7d,active30d,idle90d FROM daily_census WHERE day=?",
     )
     .bind(expired, today)
     .run();
@@ -670,4 +686,189 @@ it("rejects late snapshots across UTC days and purges expired snapshot metadata"
       .bind(expired)
       .first(),
   ).toEqual({ n: 0 });
+});
+
+// Draft — pending owner approval (docs/PRIVACY.md, "Draft review").
+const NEW_CODES = [
+  "error_unresponsive",
+  "error_gpu_lost",
+  "error_out_of_memory",
+  "error_worker",
+];
+describe("additional diagnostic codes", () => {
+  it("accepts the fixed codes from OpenZCAD and OpenFEA only, with bucket none", () => {
+    for (const event of NEW_CODES) {
+      expect(DIAGNOSTICS).toContain(event);
+      for (const app of ["openzcad", "openfea"] as const)
+        expect(metric({ level: "optional", event, bucket: "none" }, app)).toEqual({
+          level: "optional",
+          event,
+          bucket: "none",
+        });
+      expect(
+        metric({ level: "optional", event, bucket: "none" }, "openlattice3d"),
+      ).toBeNull();
+      expect(metric({ level: "basic", event, bucket: "none" }, "openzcad")).toBeNull();
+      expect(
+        metric({ level: "optional", event, bucket: "GPU hung in shader" }, "openfea"),
+      ).toBeNull();
+    }
+    for (const event of ["error_gpu", "error_network", "error_crash", "error_worker_oom"])
+      expect(metric({ level: "optional", event, bucket: "none" }, "openzcad")).toBeNull();
+  });
+  it("accepts the codes in local reports for OpenZCAD and OpenFEA, never other apps", () => {
+    for (const app of ["openzcad", "openfea"]) {
+      const report = {
+        schema: 2,
+        app,
+        rows: NEW_CODES.map((event) => ({ event, bucket: "none", count: 2 })),
+      };
+      expect(parseReport(report)).toEqual(report);
+    }
+    expect(
+      parseReport({
+        schema: 2,
+        app: "openlattice3d",
+        rows: [{ event: "error_gpu_lost", bucket: "none", count: 1 }],
+      }),
+    ).toBeNull();
+  });
+  it("counts the codes through the real RPC and rejects them from OpenLattice3D", async () => {
+    for (const event of NEW_CODES) {
+      const value = { level: "optional", event, bucket: "none" };
+      expect((await ingest("cad", value)).status).toBe(204);
+      expect((await ingest("fea", value)).status).toBe(204);
+      expect((await ingest("lattice", value)).status).toBe(400);
+    }
+    const { rows } = (await (await stats("&level=optional")).json()) as {
+      rows: { app: string; event: string; count: number }[];
+    };
+    for (const event of NEW_CODES)
+      expect(
+        rows
+          .filter((r) => r.event === event)
+          .map((r) => [r.app, r.count])
+          .sort(),
+      ).toEqual([
+        ["openfea", 1],
+        ["openzcad", 1],
+      ]);
+  });
+});
+
+const active = { ...validCensus, accounts: 40, active7d: 12, active30d: 20, idle90d: 9 };
+const snapshotBinding = async () =>
+  (
+    await mf.getBindings<{
+      GLIMPSE: { snapshot(v: unknown): Promise<{ accepted: boolean }> };
+    }>("cad")
+  ).GLIMPSE;
+const storedActivity = async () =>
+  (await mf.getD1Database("DB", "collector"))
+    .prepare("SELECT activityReported,active7d,active30d,idle90d FROM daily_census WHERE day=?")
+    .bind(today)
+    .first();
+const servedCensus = async () =>
+  (await (await stats("&level=optional")).json()) as {
+    census: Record<string, unknown>[];
+    pendingMigrations?: string[];
+  };
+describe("census activity counts", () => {
+  it("keeps snapshots without activity fields valid, as older OpenZCAD versions send them", () => {
+    const old = census(validCensus, "openzcad");
+    expect(old).toEqual(validCensus);
+    for (const k of ACTIVITY_FIELDS) expect(old).not.toHaveProperty(k);
+  });
+  it("accepts all three fields or none, as integers bounded by accounts, or null", () => {
+    expect(census(active, "openzcad")).toEqual(active);
+    const appWithheld = { ...active, active7d: null, idle90d: null };
+    expect(census(appWithheld, "openzcad")).toEqual(appWithheld);
+    const { idle90d: _idle, ...two } = active;
+    const { active7d: _a, active30d: _b, ...one } = active;
+    for (const bad of [
+      two,
+      one,
+      { ...active, active7d: -1 },
+      { ...active, active7d: 1.5 },
+      { ...active, active7d: "12" },
+      { ...active, active30d: NaN },
+      { ...active, active7d: undefined },
+      { ...active, idle90d: 41 }, // more than the consenting accounts
+      { ...active, active7d: 21 }, // a 7-day saver is also a 30-day saver
+      { ...active, active30d: 32 }, // active in 30 days and idle for 90 cannot overlap
+      { ...active, accountIds: [1, 2] },
+    ])
+      expect(census(bad, "openzcad")).toBeNull();
+    expect(census(active, "openfea")).toBeNull();
+  });
+  it(`withholds a count below ${ACTIVITY_MIN_COUNT}, or one with fewer than ${ACTIVITY_MIN_COUNT} accounts outside it`, () => {
+    expect(ACTIVITY_MIN_COUNT).toBe(5);
+    expect(thresholdActivity(active)).toEqual(active);
+    expect(
+      thresholdActivity({ ...active, active7d: 4, active30d: 36, idle90d: 0 }),
+    ).toMatchObject({ active7d: null, active30d: null, idle90d: null });
+    expect(
+      thresholdActivity({ ...active, active7d: 5, active30d: 35, idle90d: 5 }),
+    ).toMatchObject({ active7d: 5, active30d: 35, idle90d: 5 });
+    // With fewer than 2K consenting accounts every count is withheld.
+    expect(
+      thresholdActivity({ ...active, accounts: 9, active7d: 5, active30d: 5, idle90d: 4 }),
+    ).toMatchObject({ active7d: null, active30d: null, idle90d: null });
+    expect(thresholdActivity(validCensus)).toEqual(validCensus);
+    // Read time: rows without the 0005 flag never expose activity keys.
+    expect(
+      publicCensus({ ...validCensus, activityReported: null, active7d: 50, active30d: null, idle90d: null }),
+    ).toEqual(validCensus);
+    expect(publicCensus({ ...active, activityReported: 1, active7d: 3 })).toEqual({
+      ...active,
+      active7d: null,
+    });
+  });
+  it("stores withheld counts as NULL at ingest and serves them as null", async () => {
+    const GLIMPSE = await snapshotBinding();
+    expect(
+      await GLIMPSE.snapshot({ ...active, generation: 30, active7d: 3, active30d: 9, idle90d: 28 }),
+    ).toEqual({ accepted: true });
+    expect(await storedActivity()).toEqual({
+      activityReported: 1,
+      active7d: null,
+      active30d: 9,
+      idle90d: 28,
+    });
+    const served = await servedCensus();
+    expect(served.pendingMigrations).toBeUndefined();
+    expect(served.census[0]).toMatchObject({ accounts: 40, active7d: null, active30d: 9, idle90d: 28 });
+    expect(served.census[0]).not.toHaveProperty("activityReported");
+    // The database refuses a small count even if the Worker's threshold were bypassed.
+    const db = await mf.getD1Database("DB", "collector");
+    await expect(
+      db.prepare("UPDATE daily_census SET active7d=3 WHERE day=?").bind(today).run(),
+    ).rejects.toThrow(/CHECK/);
+  });
+  it("re-applies the threshold at read time to stored values", async () => {
+    const db = await mf.getD1Database("DB", "collector");
+    // A row stored without the complement rule: 9 of 12 leaves 3 accounts outside the count.
+    await db
+      .prepare("UPDATE daily_census SET accounts=12, active30d=9, idle90d=NULL WHERE day=?")
+      .bind(today)
+      .run();
+    expect((await servedCensus()).census[0]).toMatchObject({
+      accounts: 12,
+      active7d: null,
+      active30d: null,
+      idle90d: null,
+    });
+  });
+  it("clears activity counts when a later same-day snapshot comes from an older OpenZCAD", async () => {
+    const GLIMPSE = await snapshotBinding();
+    expect(await GLIMPSE.snapshot({ ...validCensus, generation: 31 })).toEqual({ accepted: true });
+    expect(await storedActivity()).toEqual({
+      activityReported: null,
+      active7d: null,
+      active30d: null,
+      idle90d: null,
+    });
+    const row = (await servedCensus()).census[0];
+    for (const k of ACTIVITY_FIELDS) expect(row).not.toHaveProperty(k);
+  });
 });

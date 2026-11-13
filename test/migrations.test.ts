@@ -2,7 +2,11 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { build } from "esbuild";
 import { Miniflare, convertV4MiniflareOptions } from "miniflare";
 import { exportJWK, generateKeyPair, SignJWT } from "jose";
-import { REQUIRED_MIGRATIONS, requiredFor } from "../src/migrations";
+import {
+  OPTIONAL_SURFACES,
+  REQUIRED_MIGRATIONS,
+  requiredFor,
+} from "../src/migrations";
 import {
   applyMigration,
   MIGRATION_FILES,
@@ -22,6 +26,20 @@ describe("REQUIRED_MIGRATIONS", () => {
       "0003_census.sql",
     ]);
     expect(requiredFor("cloudflare")).toEqual(["0004_cloudflare.sql"]);
+    expect(requiredFor("census_activity")).toEqual(["0005_census_activity.sql"]);
+  });
+  it("never lets an optional surface's migration block a page", () => {
+    const blocking = ["stats", "cloudflare"] as const;
+    for (const surface of OPTIONAL_SURFACES)
+      for (const name of requiredFor(surface))
+        for (const page of blocking) expect(requiredFor(page)).not.toContain(name);
+    // Optional migrations may only add nullable columns, so older code and data keep working.
+    for (const surface of OPTIONAL_SURFACES)
+      for (const name of requiredFor(surface))
+        for (const statement of migrationSql(name).split(";").filter((s) => s.trim())) {
+          expect(statement).toMatch(/^\s*ALTER TABLE \w+ ADD COLUMN /i);
+          expect(statement).not.toMatch(/NOT NULL/i);
+        }
   });
 });
 
@@ -73,6 +91,15 @@ beforeAll(async () => {
           compatibilityDate: "2026-10-15",
           serviceBindings: {
             GLIMPSE: { name: "collector", entrypoint: "OpenFEAIngest" },
+          },
+        },
+        {
+          name: "cad",
+          modules: true,
+          script: caller,
+          compatibilityDate: "2026-10-15",
+          serviceBindings: {
+            GLIMPSE: { name: "collector", entrypoint: "OpenZCADIngest" },
           },
         },
       ],
@@ -156,6 +183,58 @@ describe("pending-migration guard on authenticated API paths", () => {
     ]);
     await applyMigration(db, "0004_cloudflare.sql");
     expect((await get("/api/cloudflare")).status).toBe(200);
+  });
+  it("keeps analytics and census ingestion working while optional 0005 is pending, then adds activity counts", async () => {
+    const census = {
+      generation: 1,
+      accounts: 40,
+      projects: 1,
+      revisions: 1,
+      storedBytes: 10,
+      logicalBytes: 10,
+      unknownArtifacts: 0,
+      lt1mib: 1,
+      mib1to10: 0,
+      mib10to100: 0,
+      gte100mib: 0,
+    };
+    const activity = { active7d: 12, active30d: 20, idle90d: 9 };
+    const { GLIMPSE } = await mf.getBindings<{
+      GLIMPSE: { snapshot(v: unknown): Promise<{ accepted: boolean }> };
+    }>("cad");
+    type Body = {
+      census: Record<string, unknown>[];
+      pendingMigrations?: string[];
+    };
+    const optional = async () => {
+      const response = await get(
+        `/api/stats?from=${today}&to=${today}&level=optional`,
+      );
+      expect(response.status).toBe(200);
+      return (await response.json()) as Body;
+    };
+    // Before 0005: a new OpenZCAD's snapshot is still accepted; only activity is dropped.
+    expect(await GLIMPSE.snapshot({ ...census, ...activity })).toEqual({
+      accepted: true,
+    });
+    let body = await optional();
+    expect(body.pendingMigrations).toEqual(["0005_census_activity.sql"]);
+    expect(body.census).toHaveLength(1);
+    expect(body.census[0]).toMatchObject({ accounts: 40, generation: 1 });
+    expect(body.census[0]).not.toHaveProperty("active7d");
+    // Basic reads do not touch the census and report nothing pending.
+    expect(((await (await stats()).json()) as Body).pendingMigrations).toBeUndefined();
+
+    const db = await mf.getD1Database("DB", "collector");
+    await applyMigration(db, "0005_census_activity.sql");
+    // Rows written before 0005 have no activity flag and stay "not collected".
+    body = await optional();
+    expect(body.pendingMigrations).toBeUndefined();
+    expect(body.census[0]).not.toHaveProperty("active7d");
+    expect(
+      await GLIMPSE.snapshot({ ...census, ...activity, generation: 2 }),
+    ).toEqual({ accepted: true });
+    expect((await optional()).census[0]).toMatchObject(activity);
   });
   it("caches a satisfied schema per isolate instead of re-reading the ledger", async () => {
     const db = await mf.getD1Database("DB", "collector");

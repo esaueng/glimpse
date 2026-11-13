@@ -31,7 +31,9 @@ Pages:
   explicit "Not collected" gap; opted-in cloud accounts, projects and revisions
   from the latest OpenZCAD snapshot with the change since the first snapshot in
   range; workspaces opened. Cloud growth as compact sparkline rows (accounts,
-  projects, revisions, stored bytes with start, end and change), activity by app with each app's
+  projects, revisions, stored bytes with start, end and change) and, under them, an
+  account-activity row from the latest snapshot (saved in the last 7 and 30 days,
+  no save for 90 days or more, each with its share of accounts), activity by app with each app's
   main outputs and its share of API requests, top CAD operations, feature
   categories, OpenFEA workflow steps and solver backend, and part-count ranges.
 - Issues: a six-cell stat strip of server errors with error rate, diagnostic codes, failed exports,
@@ -77,11 +79,15 @@ animation or polling. Failed refresh keeps prior results and marks them stale.
 
 Empty, unavailable and unsupported stay distinct: "—" for not yet received,
 "N/A" with the owning app named when the filter excludes it, and "Not collected"
-for metrics Glimpse does not record.
+for metrics Glimpse does not record, or that the snapshot did not carry (the note
+says whether OpenZCAD did not send it or migration 0005 is pending). A count held
+back by the k-threshold shows "Withheld (fewer than 5)", never a number.
 
 Mobile (≤760px): navigation spans the width, the timeframe trigger and its
 popover span the width, stat strips reflow, wide tables scroll inside labelled regions, slow-
 operation bars move under their labels. No horizontal page overflow.
 
 Proposed metrics that are not collected yet are listed in
-[PROPOSED-METRICS.md](PROPOSED-METRICS.md) and are not rendered.
+[PROPOSED-METRICS.md](PROPOSED-METRICS.md) and are not rendered, except those
+implemented in Glimpse with app adapters pending, which render in their
+"Not collected" state until an app sends them.

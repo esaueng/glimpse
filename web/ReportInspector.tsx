@@ -86,6 +86,7 @@ export function ReportInspector({ demo = false }: { demo?: boolean }) {
                     app: "openfea",
                     rows: [
                       { event: "error_mesh", bucket: "none", count: 7 },
+                      { event: "error_gpu_lost", bucket: "none", count: 2 },
                       { event: "solver_backend", bucket: "webgpu", count: 124 },
                       { event: "mesh_latency", bucket: "1s_10s", count: 83 },
                     ],

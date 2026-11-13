@@ -2,7 +2,13 @@ import { describe, expect, it, vi } from "vitest";
 import { readJsonConfig } from "./json-config";
 import demoWorker from "../src/demo";
 import { demoStats } from "../web/demo-data";
-import { census, CENSUS_FIELDS } from "../src/expanded";
+import {
+  ACTIVITY_FIELDS,
+  ACTIVITY_MIN_COUNT,
+  census,
+  CENSUS_FIELDS,
+  thresholdActivity,
+} from "../src/expanded";
 import { metric } from "../src/contract";
 const now = new Date("2026-10-15T12:00:00Z");
 const range = {
@@ -26,7 +32,7 @@ describe("synthetic demo", () => {
       expect(
         census(
           Object.fromEntries(
-            ["generation", ...CENSUS_FIELDS].map((k) => [
+            ["generation", ...CENSUS_FIELDS, ...ACTIVITY_FIELDS].map((k) => [
               k,
               row[k as keyof typeof row],
             ]),
@@ -34,7 +40,16 @@ describe("synthetic demo", () => {
           "openzcad",
         ),
       ).not.toBeNull();
+      // Demo activity passes the same k-threshold: the three idle accounts are withheld.
+      expect(row.idle90d).toBeNull();
+      expect(row.active7d).toBeGreaterThanOrEqual(ACTIVITY_MIN_COUNT);
+      expect(thresholdActivity(row)).toEqual(row);
     }
+    // Every new diagnostic code appears for OpenZCAD and OpenFEA, never OpenLattice3D.
+    for (const event of ["error_unresponsive", "error_gpu_lost", "error_out_of_memory", "error_worker"])
+      expect(
+        [...new Set(data.rows.filter((r) => r.event === event).map((r) => r.app))].sort(),
+      ).toEqual(["openfea", "openzcad"]);
   });
   it("filters by app, collection and dates without inventing unsupported metrics", () => {
     for (const app of ["openzcad", "openfea", "openlattice3d"])

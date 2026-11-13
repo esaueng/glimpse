@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  activityValue,
   bucketCounts,
   bytes,
   censusHistory,
@@ -66,6 +67,14 @@ describe("redesigned dashboard aggregates", () => {
       b = { day: "2026-10-15", generation: 3, accounts: 2 } as CensusRow,
       c = { day: "2026-10-14", generation: 2, accounts: 5 } as CensusRow;
     expect(censusHistory([a, b, c])).toEqual([c, b]);
+  });
+  it("keeps activity values, withheld counts and not-collected fields distinct", () => {
+    const base = { day: "2026-10-15", generation: 1, accounts: 60 } as CensusRow;
+    expect(activityValue(base, "active7d")).toEqual({ state: "not-collected" });
+    expect(activityValue({ ...base, active7d: null }, "active7d")).toEqual({ state: "withheld" });
+    expect(activityValue({ ...base, active7d: 4 }, "active7d")).toEqual({ state: "withheld" });
+    expect(activityValue({ ...base, active7d: 57 }, "active7d")).toEqual({ state: "withheld" });
+    expect(activityValue({ ...base, active7d: 21 }, "active7d")).toEqual({ state: "value", value: 21 });
   });
   it("formats shares without dividing by zero", () => {
     expect(percent(1, 4)).toBe("25.0%");

@@ -1,5 +1,13 @@
 import { APPS, BUCKETS, type App, type Row } from "../src/contract";
-import { EXPANDED, PARTS, SIZES, TIMINGS } from "../src/expanded";
+import {
+  ACTIVITY_MIN_COUNT,
+  EXPANDED,
+  PARTS,
+  SIZES,
+  TIMINGS,
+  type ActivityField,
+  type CensusRow,
+} from "../src/expanded";
 import {
   Columns,
   DataTable,
@@ -15,6 +23,7 @@ import {
   type Tone,
 } from "./charts";
 import {
+  activityValue,
   appName,
   bucketCounts,
   bytes,
@@ -33,6 +42,7 @@ import {
 import {
   capitalize,
   cloudStatusLabels,
+  diagnosticHints,
   diagnosticLabels,
   label,
   operationLabels,
@@ -57,6 +67,62 @@ const notApplicable = (scope: string, owners: App[]) =>
 const EXPANDED_APPS: App[] = ["openzcad", "openfea"];
 
 const OptIn = () => <span className="badge">Opted-in users</span>;
+
+const activityRows: [ActivityField, string][] = [
+  ["active7d", "Saved in the last 7 days"],
+  ["active30d", "Saved in the last 30 days"],
+  ["idle90d", "No save for 90 days or more"],
+];
+/**
+ * Activity counts from the latest OpenZCAD snapshot. "Withheld" (k-threshold) and
+ * "Not collected" (older OpenZCAD, or migration 0005 pending) stay distinct from "—".
+ */
+export function AccountActivity({ row, pending = false }: { row: CensusRow; pending?: boolean }) {
+  return (
+    <div className="panel-foot">
+      <span className="muted small">
+        Account activity · consenting accounts · snapshot{" "}
+        <span className="nowrap">{row.day} UTC</span>
+      </span>
+      <ul className="category-grid activity-grid">
+        {activityRows.map(([key, name]) => {
+          const shown = activityValue(row, key);
+          return (
+            <li key={key}>
+              <span className="muted small">{name}</span>
+              {shown.state === "value" ? (
+                <>
+                  <span className="numeric big">{number(shown.value)}</span>
+                  <span className="muted small">
+                    {percent(shown.value, row.accounts)} of accounts
+                  </span>
+                </>
+              ) : shown.state === "withheld" ? (
+                <>
+                  <span className="gap-value">
+                    Withheld (fewer than {ACTIVITY_MIN_COUNT})
+                  </span>
+                  <span className="muted small">
+                    Too few accounts in or outside this count
+                  </span>
+                </>
+              ) : (
+                <>
+                  <span className="gap-value">Not collected</span>
+                  <span className="muted small">
+                    {pending
+                      ? "Glimpse migration 0005 not applied"
+                      : "Not sent by OpenZCAD for this snapshot"}
+                  </span>
+                </>
+              )}
+            </li>
+          );
+        })}
+      </ul>
+    </div>
+  );
+}
 
 export function Overview({ data, app }: { data: Loaded; app: string }) {
   const rows = data.optional.rows,
@@ -189,6 +255,12 @@ export function Overview({ data, app }: { data: Loaded; app: string }) {
                 {shortDay(first.day)} – {shortDay(latest.day)} · daily
                 history on Storage
               </span>
+              <AccountActivity
+                row={latest}
+                pending={(data.optional.pendingMigrations ?? []).includes(
+                  "0005_census_activity.sql",
+                )}
+              />
             </>
           )}
         </Panel>
@@ -512,7 +584,14 @@ export function Issues({
                 {codes.length ? (
                   codes.map((c) => (
                     <tr key={c.event}>
-                      <td title={c.event}>{label(diagnosticLabels, c.event)}</td>
+                      <td title={c.event}>
+                        {label(diagnosticLabels, c.event)}
+                        {c.event in diagnosticHints && (
+                          <span className="cell-hint">
+                            {diagnosticHints[c.event as keyof typeof diagnosticHints]}
+                          </span>
+                        )}
+                      </td>
                       <td className="muted">{c.apps.map(appName).join(" · ")}</td>
                       <td className="numeric">{number(c.count)}</td>
                       <td>
