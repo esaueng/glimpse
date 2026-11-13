@@ -57,6 +57,47 @@ class MetadataWorkflowTests(unittest.TestCase):
                                      ("synthetic-publisher" if call.method in ("POST", "PATCH") else "synthetic-reader"))
                 self.assertEqual(json.loads(calls[-1].data)["conclusion"], "success" if compliant else "failure")
 
+    def test_final_check_update_is_retried_after_a_transient_error(self):
+        import urllib.error
+        script = Path(__file__).with_name("commit_privacy.py")
+        spec = importlib.util.spec_from_file_location("commit_privacy", script)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        with tempfile.TemporaryDirectory() as directory:
+            event = Path(directory) / "event.json"
+            head, base = "b" * 40, "a" * 40
+            event.write_text(json.dumps({"pull_request": {"base": {"sha": base}, "head": {"sha": head, "ref": "topic"}}}))
+            env = dict(GITHUB_EVENT_NAME="pull_request_target", GITHUB_EVENT_PATH=str(event),
+                       GITHUB_API_URL="https://api.github.com", GITHUB_REPOSITORY="example/repo",
+                       GH_TOKEN="synthetic-publisher", GH_READ_TOKEN="synthetic-reader",
+                       GITHUB_SHA=base, COMMIT_PRIVACY_SELF_TEST="0")
+            patches = []
+
+            def respond(request, timeout):
+                if request.method == "POST":
+                    result = {"id": 42}
+                elif request.method == "PATCH":
+                    patches.append(json.loads(request.data))
+                    if len(patches) == 1:
+                        raise urllib.error.HTTPError(request.full_url, 502, "Bad Gateway", {}, io.BytesIO())
+                    result = {}
+                else:
+                    raw = {"name": "Peter", "email": "123+petertoday@users.noreply.github.com"}
+                    result = {"total_commits": 1, "commits": [{"sha": head,
+                              "commit": {"author": raw, "committer": raw},
+                              "author": None, "committer": None}]}
+                return io.BytesIO(json.dumps(result).encode())
+
+            with patch.dict(os.environ, env), patch("urllib.request.urlopen", side_effect=respond), \
+                    patch.object(module.Path, "read_text", return_value=json.dumps({"baseline": base})), \
+                    patch.object(module.time, "sleep") as sleep:
+                with contextlib.redirect_stdout(io.StringIO()):
+                    result = vars(module)["main"](publish=True)
+            self.assertEqual(result, False)
+            self.assertEqual(len(patches), 2)
+            self.assertEqual(patches[-1]["conclusion"], "success")
+            sleep.assert_called_once()
+
 
 if __name__ == "__main__":
     unittest.main()
