@@ -18,8 +18,8 @@ usage grant: the browser must store `granted-v2` after the updated notice. Old
 | Saved project size observations | Complete saved local project files in both apps | Repeated saves count repeatedly; app-specific scopes, not unique projects |
 | Part observations | OpenZCAD body-node count after successful edits; OpenFEA display body count on a project-file save | Coarse ranges, repeatable observations; no part IDs, names or geometry |
 | Transfer observations | Successful OpenZCAD cloud JSON writes; OpenFEA encrypted backup upload/download | Size ranges and operation counts, not exact network bandwidth or billing |
-| Diagnostics | Fixed codes at explicit failure sites, plus generic runtime errors: `error_runtime`, `error_import`, `error_export`, `error_mesh` and `error_solver` (OpenFEA only), `error_cloud_save`, `error_cloud_load`, `error_storage`, `error_feature`, `error_render`. Also accepted, not yet sent by either app (draft review pending owner approval): `error_unresponsive` (main thread blocked 5 s or more), `error_gpu_lost`, `error_out_of_memory`, `error_worker` | Counts are signals, may overlap for one failure; no raw errors, stacks, URLs or automatic issue creation |
-| Account activity | OpenZCAD accounts with the separate account-statistics grant: saved in the last 7 days, in the last 30 days, and no save for 90 days or more. Accepted, not yet sent (draft review pending owner approval) | Counts below 5, or leaving fewer than 5 accounts outside them, are withheld. Not people, visits or sessions |
+| Diagnostics | Fixed codes at explicit failure sites, plus generic runtime errors: `error_runtime`, `error_import`, `error_export`, `error_mesh` and `error_solver` (OpenFEA only), `error_cloud_save`, `error_cloud_load`, `error_storage`, `error_feature`, `error_render`. Also accepted, not yet sent by either app (privacy review approved 13 Nov 2026): `error_unresponsive` (main thread blocked 5 s or more), `error_gpu_lost`, `error_out_of_memory`, `error_worker` | Counts are signals, may overlap for one failure; no raw errors, stacks, URLs or automatic issue creation |
+| Account activity | OpenZCAD accounts with the separate account-statistics grant: saved in the last 7 days, in the last 30 days, and no save for 90 days or more. Accepted, not yet sent (privacy review approved 13 Nov 2026) | Counts below 5, or leaving fewer than 5 accounts outside them, are withheld. Not people, visits or sessions |
 | Feature operations | Exact allowlisted CAD command kinds; fixed FEA mesh/solve/export categories | No command labels, payloads or parameters |
 
 OpenFEA has no registered cloud-account system. Its encrypted recovery backups
@@ -44,8 +44,8 @@ Glimpse generation before resuming; a restored lower counter is safely rejected,
 ranges summing to `projects`.
 
 Optionally, and only all together, it also accepts the `ACTIVITY_FIELDS`
-`active7d`, `active30d` and `idle90d` (**Draft — pending owner approval**; see
-[PRIVACY.md](PRIVACY.md#draft-review-additional-diagnostic-codes-and-account-activity)).
+`active7d`, `active30d` and `idle90d` (privacy review approved 13 November 2026; see
+[PRIVACY.md](PRIVACY.md#review-additional-diagnostic-codes-and-account-activity)).
 Each is a non-negative integer no larger than `accounts`, or `null` when the app
 withholds it; `active7d` ≤ `active30d` and `active30d` + `idle90d` ≤ `accounts`.
 A snapshot without them stays valid, so older OpenZCAD versions keep working.

@@ -19,7 +19,7 @@ export const DIAGNOSTICS = [
   "error_storage",
   "error_feature",
   "error_render",
-  // Draft — pending owner approval (docs/PRIVACY.md). Accepted from OpenZCAD and OpenFEA
+  // Privacy review approved 13 Nov 2026 (docs/PRIVACY.md). Accepted from OpenZCAD and OpenFEA
   // like the codes above; nothing is collected until an app adapter sends them.
   "error_unresponsive", // main thread blocked for 5 s or more
   "error_gpu_lost", // WebGPU/WebGL device or context lost
@@ -185,7 +185,7 @@ export const CENSUS_FIELDS = [
   "mib10to100",
   "gte100mib",
 ] as const;
-// Optional account-activity counts (migration 0005). Draft — pending owner approval.
+// Optional account-activity counts (migration 0005). Privacy review approved 13 Nov 2026.
 // All three arrive together or not at all, so older OpenZCAD versions keep working.
 export const ACTIVITY_FIELDS = ["active7d", "active30d", "idle90d"] as const;
 export type ActivityField = (typeof ACTIVITY_FIELDS)[number];

@@ -114,7 +114,7 @@ model-size candidate.
 largest operational gap is failure insight for browser-heavy lattice generation,
 and the four new diagnostic codes (`error_gpu_lost`, `error_out_of_memory`,
 `error_worker`, `error_unresponsive`) that are now
-[drafted for OpenZCAD and OpenFEA](../PRIVACY.md#draft-review-additional-diagnostic-codes-and-account-activity)
+[approved for OpenZCAD and OpenFEA](../PRIVACY.md#review-additional-diagnostic-codes-and-account-activity)
 describe exactly those failures. Option B reuses vocabulary that is already
 reviewed, adds no new dimension, needs no migration, and avoids collecting
 cloud, solver and CAD-command events that cannot mean anything for a browser-only

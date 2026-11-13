@@ -11,7 +11,7 @@ or change any application's consent controls.
 
 Reviewed 15 October 2026. This records a technical approach and its limits; it is not a blanket legal exemption or a production compliance certification.
 
-**Draft addition, 12 November 2026.** The [draft review of additional diagnostic codes and account activity](#draft-review-additional-diagnostic-codes-and-account-activity) at the end of this page is **Draft — pending owner approval**. It is not covered by the 15 October review, and nothing it describes is collected.
+**Addition approved 13 November 2026.** The [review of additional diagnostic codes and account activity](#review-additional-diagnostic-codes-and-account-activity) at the end of this page was written 12 November 2026 and approved by the owner as drafted on 13 November 2026. Nothing it describes is collected until the app adapters ship.
 
 **Review pending.** The infrastructure-monitor paragraph above was added on 24 October 2026 with the Cloudflare page (#26), after the last full review. It has not been through that review. Open questions include the 400-day retention of `cf_*` history, which is longer than the 90-day analytics retention, and the dashboard's write path for budgets and manual app mappings (`POST /api/cloudflare/settings`, behind Access). The review is tracked in the [roadmap](ROADMAP.md#open-rollout-and-verification-items).
 
@@ -68,15 +68,24 @@ Jurisdiction, audience (including children), notices, lawful basis, provider log
 backup retention and deployment-specific configuration still need review before
 activation. Technical tests cannot certify legal compliance or anonymity.
 
-## Draft review: additional diagnostic codes and account activity
+## Review: additional diagnostic codes and account activity
 
-**Draft — pending owner approval.** Written 12 November 2026 for roadmap feature
-candidates 1 and 2 ([roadmap](ROADMAP.md#feature-candidates)). It is not part of
-the 15 October 2026 review above and has not been approved. Glimpse is prepared
-to accept the values below, but **nothing is collected**: OpenZCAD and OpenFEA
-send them only after their own adapter changes, which are not made, and those
-should wait for approval. Until then no new diagnostic code appears and the
-dashboard shows the activity counts as "Not collected".
+**Approved by the owner as drafted, 13 November 2026.** Written 12 November 2026
+for roadmap feature candidates 1 and 2 ([roadmap](ROADMAP.md#feature-candidates)),
+separately from the 15 October 2026 review above. Glimpse accepts the values
+below, but **nothing is collected yet**: OpenZCAD and OpenFEA send them only after
+their own adapter changes, which are not made. Until then no new diagnostic code
+appears and the dashboard shows the activity counts as "Not collected".
+
+Decisions recorded with the approval:
+
+- The new codes need no consent-version or notice change; they fall within the
+  existing v2 description.
+- Activity counts use K = 5 with the complement rule below and are **not**
+  rounded; the differencing risk described below is accepted given owner-only
+  access, one snapshot per UTC day and 90-day retention.
+- Whether OpenZCAD's account-statistics permission wording covers save activity
+  remains a precondition for the OpenZCAD adapter, as stated under Consent.
 
 ### Additional diagnostic codes
 
@@ -136,9 +145,8 @@ dashboard shows the activity counts as "Not collected".
 - **Residual risk:** a threshold does not stop differencing. If `active7d` moves
   from 12 to 13 between two days, one consenting account saved in that window.
   Glimpse keeps only the latest snapshot per UTC day, access is owner-only behind
-  Cloudflare Access, and rows expire after 90 days, but the owner should decide
-  whether that is acceptable or whether counts should also be rounded (for
-  example to the nearest 5) before approval.
+  Cloudflare Access, and rows expire after 90 days, but the owner accepted
+  this without rounding when approving this section (13 November 2026).
 - **Consent:** the separate OpenZCAD account-statistics permission currently
   describes numeric account and storage totals. Whether save activity is within
   that wording, or the permission text and version must change, is an owner
@@ -153,8 +161,7 @@ dashboard shows the activity counts as "Not collected".
 
 ### Before collection starts
 
-1. The owner approves or amends this section, records the date, and removes
-   the draft marker.
+1. Done: owner approval recorded on 13 November 2026.
 2. OpenZCAD and OpenFEA adapter PRs send the codes; the OpenZCAD adapter sends
    the activity counts, with its account-permission text reviewed.
 3. Migration `0005` is applied to Preview and Production under authorization.

@@ -11,13 +11,13 @@ app adapters pending), **Next** (proposed for the next schema change),
 **Deferred** (blocked on a privacy or consent revision), **Needs redesign**
 (does not fit the current contract), **Overlaps** (largely covered by existing
 metrics), **Later** (no blocker, not prioritised). Only the two implemented
-items have a privacy review, and it is a draft pending owner approval.
+items have a privacy review; the owner approved it on 13 November 2026.
 
 ## Implemented in Glimpse, app adapters pending
 
 Glimpse accepts, stores and renders these, but no app sends them yet, so
-nothing is collected. Their [draft privacy review](PRIVACY.md#draft-review-additional-diagnostic-codes-and-account-activity)
-is **Draft — pending owner approval**; the app adapter PRs should wait for it.
+nothing is collected. Their [privacy review](PRIVACY.md#review-additional-diagnostic-codes-and-account-activity)
+was approved by the owner on 13 November 2026; the app adapter PRs can proceed.
 Retention is identical to existing data (90 UTC days).
 
 | Metric | Shape | Glimpse side | Still needed | Privacy notes |

@@ -67,8 +67,8 @@ not collected yet are listed in [proposed metrics](docs/PROPOSED-METRICS.md).
 
 The service also accepts four more OpenZCAD/OpenFEA diagnostic codes and
 optional OpenZCAD account-activity counts (saved in the last 7 and 30 days, idle
-for 90 days or more; counts below 5 are withheld). Their privacy review is a
-draft pending owner approval and no app sends them yet, so the dashboard shows
+for 90 days or more; counts below 5 are withheld). Their privacy review was
+approved on 13 November 2026, but no app sends them yet, so the dashboard shows
 the activity counts as "Not collected"; see
 [proposed metrics](docs/PROPOSED-METRICS.md#implemented-in-glimpse-app-adapters-pending).
 

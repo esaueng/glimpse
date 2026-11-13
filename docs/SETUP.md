@@ -46,9 +46,9 @@ grants require a fresh choice; cloud account statistics require a separate grant
 
 ## Account activity counts (migration 0005)
 
-**Draft — pending owner approval.** `0005_census_activity.sql` adds nullable
+Privacy review approved 13 November 2026. `0005_census_activity.sql` adds nullable
 `daily_census` columns for OpenZCAD's optional account-activity counts (see the
-[draft privacy review](PRIVACY.md#draft-review-additional-diagnostic-codes-and-account-activity)).
+[privacy review](PRIVACY.md#review-additional-diagnostic-codes-and-account-activity)).
 No application of it is recorded. Unlike `0001`–`0004`, it is optional for the
 pending-migration guard, so the Worker may be deployed first:
 
