@@ -141,6 +141,13 @@ describe("MCP transport", () => {
     expect(tools.every((t) => t.inputSchema.type === "object")).toBe(true);
     expect(tools.filter((t) => !t.annotations.readOnlyHint).map((t) => t.name)).toEqual(["update_issue"]);
   });
+  it("rejects malformed requests instead of treating them as notifications", async () => {
+    const reply = async (body: unknown) => (await (await post(body)).json()) as { id: unknown; error: { code: number } };
+    expect(await reply({ jsonrpc: "2.0", id: 1, method: 42 })).toMatchObject({ id: 1, error: { code: -32600 } });
+    expect(await reply({ jsonrpc: "1.0", id: 2, method: "ping" })).toMatchObject({ id: 2, error: { code: -32600 } });
+    expect(await reply({ jsonrpc: "2.0", id: { x: 1 }, method: "ping" })).toMatchObject({ id: null, error: { code: -32600 } });
+    expect((await post({ jsonrpc: "2.0", id: 9, result: {} })).status).toBe(202);
+  });
   it("answers a batch from older clients", async () => {
     const res = await post([
       { jsonrpc: "2.0", id: "a", method: "ping" },

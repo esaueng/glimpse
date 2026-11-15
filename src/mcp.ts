@@ -313,8 +313,13 @@ async function handle(db: D1Database, message: unknown, now: Date): Promise<Json
   if (!message || typeof message !== "object" || Array.isArray(message))
     return { jsonrpc: "2.0", id: null, error: { code: -32600, message: "Invalid request" } };
   const m = message as Json;
-  // Notifications and client responses get no reply.
-  if (!("id" in m) || m.id === null || typeof m.method !== "string") return null;
+  // A client's response to a server request (none are sent) needs no reply.
+  if (!("method" in m) && ("result" in m || "error" in m)) return null;
+  const validId = typeof m.id === "string" || (typeof m.id === "number" && Number.isFinite(m.id));
+  if (m.jsonrpc !== "2.0" || typeof m.method !== "string" || ("id" in m && !validId))
+    return { jsonrpc: "2.0", id: validId ? m.id : null, error: { code: -32600, message: "Invalid request" } };
+  // Notifications get no reply.
+  if (!("id" in m)) return null;
   const id = m.id;
   const reply = (result: unknown): Json => ({ jsonrpc: "2.0", id, result });
   const fail = (error: RpcError): Json => ({ jsonrpc: "2.0", id, error });
