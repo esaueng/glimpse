@@ -265,7 +265,8 @@ constant time, and gives the same 401 for an unknown source and a wrong secret. 
 are capped at 64 KiB. Nothing reaches the aggregate analytics tables.
 
 **Stored** (`issues`, `issue_events`, `sources`; migration `0006_issues.sql`): the
-Worker name, mapped app, category, severity, a scrubbed title of at most 200
+Worker name, mapped app, category, severity, a SHA-256 hash of the source's own issue
+key (never the key), a scrubbed title of at most 200
 characters, the error type, at most 15 stack frames reduced to function, file name, line
 and column, occurrence and delivery counts, first and last seen times, a Cloudflare
 dashboard link without its query string, the status, an optional owner note, and an
@@ -274,7 +275,7 @@ later "agent"), never a person. For an unrecognised payload only its key paths a
 kept, never values, so the adapter can be fixed.
 
 **Scrubbed before storage** (`src/sources/scrub.ts`): emails, IPv4 and IPv6
-addresses, JWTs and `token=`/`secret=`/`password=`/`auth` values, query strings and
+addresses (including compressed forms), JWTs and `token=`/`secret=`/`password=`/`auth` values, query strings and
 fragments, UUIDs, hex and other long identifiers, and numbers of six or more digits.
 Stack lines that are not frames, which is where messages sit, are dropped.
 

@@ -5,7 +5,8 @@ CREATE TABLE sources (
   created_at TEXT NOT NULL, last_received TEXT, last_status TEXT,
   received INTEGER NOT NULL DEFAULT 0, rejected INTEGER NOT NULL DEFAULT 0, shape TEXT
 );
--- One row per grouped problem. Text is scrubbed before storage (src/sources/scrub.ts).
+-- One row per grouped problem. Text is scrubbed before storage (src/sources/scrub.ts);
+-- the fingerprint is a SHA-256 hash of the source's own key, never the key itself.
 CREATE TABLE issues (
   id TEXT PRIMARY KEY, source TEXT NOT NULL, fingerprint TEXT NOT NULL,
   app TEXT, service TEXT,
@@ -16,6 +17,8 @@ CREATE TABLE issues (
   first_seen TEXT NOT NULL, last_seen TEXT NOT NULL,
   occurrences INTEGER NOT NULL DEFAULT 0, deliveries INTEGER NOT NULL DEFAULT 1,
   note TEXT, updated_at TEXT NOT NULL,
+  -- When status last changed, and the status before the latest update (for the activity log).
+  status_at TEXT NOT NULL, prev_status TEXT,
   UNIQUE(source, fingerprint)
 );
 CREATE INDEX issues_status ON issues(status, last_seen);

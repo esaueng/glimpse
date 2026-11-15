@@ -112,24 +112,32 @@ export async function appFor(db: D1Database, service: string | null): Promise<Ap
   return APPS.find((a) => name === a || name.startsWith(`${a}-`) || name.startsWith(`${a}_`)) ?? null;
 }
 
-const later = (a: string, b: string | null) => (b && b > a ? b : a);
-
-/** Upserts one event. Resolved issues reopen on a new occurrence; ignored ones stay ignored. */
+/**
+ * Upserts one event in single statements, so a concurrent delivery or dashboard change is
+ * never overwritten with stale values. Status rules, applied against the stored row:
+ * - ignored stays ignored;
+ * - an end event resolves an open or acknowledged issue only if it is not older than the
+ *   latest occurrence;
+ * - a resolved issue reopens only on a newer occurrence (later than the last one seen and
+ *   than the resolution, or a higher reported count), so replays never reopen it.
+ */
 export async function ingest(db: D1Database, source: string, event: IssueEvent, now = new Date()) {
   const at = now.toISOString(),
-    id = `iss_${(await sha256(`${source}\n${event.fingerprint}`)).slice(0, 16)}`,
+    fingerprint = await sha256(`${source}\n${event.fingerprint}`),
+    id = `iss_${fingerprint.slice(0, 16)}`,
     seen = event.lastSeen && event.lastSeen <= at ? event.lastSeen : at,
     detail = JSON.stringify(event.detail),
-    app = await appFor(db, event.service);
+    app = await appFor(db, event.service),
+    occ = event.occurrences;
   const inserted = await db
     .prepare(
-      `INSERT INTO issues(id,source,fingerprint,app,service,category,severity,title,detail,url,status,first_seen,last_seen,occurrences,deliveries,updated_at)
-       VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,1,?) ON CONFLICT(source,fingerprint) DO NOTHING`,
+      `INSERT INTO issues(id,source,fingerprint,app,service,category,severity,title,detail,url,status,first_seen,last_seen,occurrences,deliveries,updated_at,status_at)
+       VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,1,?,?) ON CONFLICT(source,fingerprint) DO NOTHING`,
     )
     .bind(
       id,
       source,
-      event.fingerprint,
+      fingerprint,
       app,
       event.service,
       event.category,
@@ -140,37 +148,39 @@ export async function ingest(db: D1Database, source: string, event: IssueEvent, 
       event.resolved ? "resolved" : "open",
       event.firstSeen && event.firstSeen <= seen ? event.firstSeen : seen,
       seen,
-      event.occurrences ?? 1,
+      occ ?? 1,
+      at,
       at,
     )
     .run();
   if (inserted.meta.changes) {
-    await activity(db, id, at, "opened", event.occurrences !== null ? `${event.occurrences} occurrences` : null);
+    await activity(db, id, at, "opened", occ !== null ? `${occ} occurrences` : null);
     return { id, created: true };
   }
-  const prior = await db
-    .prepare("SELECT status,last_seen,occurrences FROM issues WHERE source=? AND fingerprint=?")
-    .bind(source, event.fingerprint)
-    .first<{ status: Status; last_seen: string; occurrences: number }>();
-  if (!prior) return { id, created: false };
-  const status: Status =
-    prior.status === "ignored"
-      ? "ignored"
-      : event.resolved
-        ? prior.status === "acknowledged" || prior.status === "open"
-          ? "resolved"
-          : prior.status
-        : prior.status === "resolved"
-          ? "open"
-          : prior.status;
-  // Reported totals replace the count; without one, each delivery counts once.
-  const occurrences = event.occurrences !== null ? Math.max(prior.occurrences, event.occurrences) : prior.occurrences + 1;
-  await db
+  // SET expressions read the row as it was before this statement.
+  const next = `CASE
+      WHEN status='ignored' THEN 'ignored'
+      WHEN ?1 = 1 THEN CASE WHEN status IN ('open','acknowledged') AND ?2 >= last_seen THEN 'resolved' ELSE status END
+      WHEN status='resolved' AND ?2 > status_at AND (?2 > last_seen OR (?3 IS NOT NULL AND ?3 > occurrences)) THEN 'open'
+      ELSE status END`;
+  const row = await db
     .prepare(
-      `UPDATE issues SET app=COALESCE(?,app), service=COALESCE(?,service), category=?, severity=?, title=?, detail=?, url=COALESCE(?,url),
-       status=?, last_seen=?, occurrences=?, deliveries=deliveries+1, updated_at=? WHERE source=? AND fingerprint=?`,
+      `UPDATE issues SET
+        prev_status=status,
+        status=${next},
+        status_at=CASE WHEN ${next} <> status THEN ?4 ELSE status_at END,
+        occurrences=CASE WHEN ?3 IS NULL THEN occurrences + (CASE WHEN ?1 = 1 THEN 0 ELSE 1 END) ELSE MAX(occurrences, ?3) END,
+        last_seen=CASE WHEN ?1 = 0 AND ?2 > last_seen THEN ?2 ELSE last_seen END,
+        app=COALESCE(?5,app), service=COALESCE(?6,service), category=?7, severity=?8, title=?9, detail=?10,
+        url=COALESCE(?11,url), deliveries=deliveries+1, updated_at=?4
+       WHERE source=?12 AND fingerprint=?13
+       RETURNING prev_status, status`,
     )
     .bind(
+      event.resolved ? 1 : 0,
+      seen,
+      occ,
+      at,
       app,
       event.service,
       event.category,
@@ -178,20 +188,17 @@ export async function ingest(db: D1Database, source: string, event: IssueEvent, 
       event.title,
       detail,
       event.url,
-      status,
-      later(prior.last_seen, seen),
-      occurrences,
-      at,
       source,
-      event.fingerprint,
+      fingerprint,
     )
-    .run();
+    .first<{ prev_status: Status; status: Status }>();
+  if (!row) return { id, created: false };
   await activity(
     db,
     id,
     at,
-    status !== prior.status ? (status === "open" ? "reopened" : `source ${status}`) : "recurred",
-    event.occurrences !== null ? `${event.occurrences} occurrences` : null,
+    row.status !== row.prev_status ? (row.status === "open" ? "reopened" : `source ${row.status}`) : "recurred",
+    occ !== null ? `${occ} occurrences` : null,
   );
   return { id, created: false };
 }
@@ -273,8 +280,10 @@ export async function setStatus(
 ): Promise<boolean> {
   const at = now.toISOString();
   const { meta } = await db
-    .prepare("UPDATE issues SET status=?, note=COALESCE(?,note), updated_at=? WHERE id=?")
-    .bind(status, note, at, id)
+    .prepare(
+      "UPDATE issues SET prev_status=status, status=?, status_at=?, note=COALESCE(?,note), updated_at=? WHERE id=?",
+    )
+    .bind(status, at, note, at, id)
     .run();
   if (!meta.changes) return false;
   await activity(db, id, at, `${status} by ${actor}`, note);

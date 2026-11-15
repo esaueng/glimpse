@@ -17,6 +17,11 @@ describe("scrub", () => {
     const jwt = ["eyJhbGciOiJIUzI1NiJ9", "eyJzdWIiOiIxMjM0NTY3ODkwIn0", "abcdefghijklmnop"].join(".");
     expect(scrub(`Authorization: Bearer ${jwt}`)).toBe("Authorization: [secret]");
     expect(scrub("password=hunter2 failed")).toBe("[secret] failed");
+    // Compressed IPv6, without touching frames, times, C++ scopes or plain colons.
+    expect(scrub("Failure from 2001:db8::1234, fe80::1%eth0 and ::1")).toBe("Failure from [ip], [ip] and [ip]");
+    expect(scrub("TypeError: x at index.ts:22:5 at 12:30:45 in Foo::bar, a : b")).toBe(
+      "TypeError: x at index.ts:22:5 at 12:30:45 in Foo::bar, a : b",
+    );
     expect(scrub("word ".repeat(100), 20)).toHaveLength(20);
     expect(scrub("  ")).toBeNull();
     expect(scrub({})).toBeNull();
@@ -231,6 +236,49 @@ describe("webhook and inbox service", () => {
     await deliver(source, secret, { text: "Crash", data: { issue: { id: "i1", script_name: "openfea" } } });
     detail = (await (await api(`/api/issues/${issue.id}`)).json()) as typeof detail;
     expect(detail.status).toBe("ignored");
+  });
+
+  it("never stores a source's raw issue key", async () => {
+    const { id, secret } = (await (
+      await api("/api/sources", { method: "POST", body: JSON.stringify({ kind: "cloudflare-issues", name: "Keys" }) })
+    ).json()) as Record<string, string>;
+    await deliver(id, secret, { text: "Crash", data: { issue: { id: "alice@example.com", script_name: "openlattice3d" } } });
+    const body = await (await api("/api/issues?app=openlattice3d")).text();
+    expect(body).toContain("Crash");
+    expect(body).not.toContain("alice");
+  });
+
+  it("ignores replays and stale end events when choosing a status", async () => {
+    const { id: source, secret } = (await (
+      await api("/api/sources", { method: "POST", body: JSON.stringify({ kind: "cloudflare-issues", name: "Order" }) })
+    ).json()) as Record<string, string>;
+    const at = (s: number) => Math.floor(Date.now() / 1000) - s;
+    const crash = (ts: number, extra: Record<string, unknown> = {}) => ({
+      text: "Order crash",
+      ts,
+      data: { issue: { id: "order-1", script_name: "openzcad", occurrences: 3 } },
+      ...extra,
+    });
+    await deliver(source, secret, crash(at(600)));
+    const issue = ((await (await api("/api/issues?category=error&app=openzcad")).json()) as {
+      issues: { id: string; title: string }[];
+    }).issues.find((i) => i.title === "Order crash")!;
+    const status = async () => ((await (await api(`/api/issues/${issue.id}`)).json()) as { status: string }).status;
+
+    // An end event older than the latest occurrence does not resolve it.
+    await deliver(source, secret, crash(at(900), { alert_event: "ALERT_STATE_EVENT_END" }));
+    expect(await status()).toBe("open");
+
+    await api(`/api/issues/${issue.id}`, { method: "POST", body: '{"status":"resolved"}' });
+    // Replaying the same occurrence does not reopen it.
+    await deliver(source, secret, crash(at(600)));
+    expect(await status()).toBe("resolved");
+    // A newer occurrence does.
+    await deliver(source, secret, crash(at(0) + 1));
+    expect(await status()).toBe("open");
+    // A current end event resolves it.
+    await deliver(source, secret, crash(at(0) + 2, { alert_event: "ALERT_STATE_EVENT_END" }));
+    expect(await status()).toBe("resolved");
   });
 
   it("validates writes and filters", async () => {

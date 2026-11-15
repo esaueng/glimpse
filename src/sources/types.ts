@@ -29,6 +29,7 @@ export type IssueRow = {
   deliveries: number;
   note: string | null;
   updated_at: string;
+  status_at: string;
 };
 export type Issue = Omit<IssueRow, "detail"> & { detail: IssueEvent["detail"] };
 export type IssueActivity = { at: string; kind: string; detail: string | null };
