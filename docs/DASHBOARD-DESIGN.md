@@ -8,7 +8,9 @@ within the existing `style-src 'self'` policy).
 Shell: a 232px sidebar with the Glimpse mark, grouped navigation and the access
 label. Groups: Monitor (Home, Issues, Performance), Product (Usage, Storage),
 Infrastructure (Costs) and Settings (Sources, Privacy). Each item has a 17px line
-icon; the current page has a selected background and an accent edge. At 900px
+icon; the current page has a selected background and an accent icon. No
+coloured accent edges or stripes on cards, rows or navigation; status is
+carried by pills and text. At 900px
 and below the sidebar becomes a sticky top bar with a menu button
 (`aria-expanded`, Escape closes) that reveals the same navigation.
 
@@ -57,6 +59,7 @@ Pages:
   day, OpenZCAD cloud snapshots, Cloudflare usage and billing with a link to
   Costs) and planned ones, each with its delivery method (push, pull, probe)
   and state. Planned sources are labelled Planned and never shown as data.
+  Sources always reads all apps; the app filter is hidden there.
 - Usage (formerly Overview), utilization: a five-cell stat strip with Total users shown as an
   explicit "Not collected" gap; opted-in cloud accounts, projects and revisions
   from the latest OpenZCAD snapshot with the change since the first snapshot in

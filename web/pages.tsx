@@ -73,7 +73,7 @@ function HealthCard({ health, onOpen }: { health: AppHealth; onOpen: () => void 
           </dd>
         </div>
         <div>
-          <dt>Diagnostics</dt>
+          <dt>Diagnostics · opt-in</dt>
           <dd>{number(health.diagnostics)}</dd>
         </div>
       </dl>
@@ -405,6 +405,7 @@ function SourceList({ sources, navigate }: { sources: Source[]; navigate: Naviga
   );
 }
 
+/** Expects data for all apps: the dashboard ignores the app filter on this page. */
 export function Sources({ data, navigate }: { data: Loaded; navigate: Navigate }) {
   const last = (app: App) => {
     const days = [...data.basic.rows, ...data.optional.rows].filter((r) => r.app === app).map((r) => r.day).sort();

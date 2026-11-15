@@ -207,9 +207,11 @@ export function Dashboard({
   const [menuOpen, setMenuOpen] = useState(false);
   const setNotice = (notice: string) =>
     setLocation((current) => ({ ...current, notice }));
-  const { app, from, to } = filter;
+  const { from, to } = filter;
   const page = pageOf(view),
-    analyticsView = page.data;
+    analyticsView = page.data,
+    // Sources reports every source, so it always reads all apps.
+    app = view === "sources" ? "all" : filter.app;
   // Basic and opt-in aggregates stay separate queries; each panel names its source.
   const { data, loading, error, refresh } = useLoader<Loaded>(
     (signal) =>
@@ -420,7 +422,7 @@ export function Dashboard({
               value={filter}
               onChange={(t) => apply({ app: filter.app, ...t })}
             />
-            <div className="app-filter" role="group" aria-label="App">
+            {view !== "sources" && <div className="app-filter" role="group" aria-label="App">
               {appChoices.map(([id, name]) => (
                 <button
                   key={id}
@@ -432,7 +434,7 @@ export function Dashboard({
                   {name}
                 </button>
               ))}
-            </div>
+            </div>}
           </div>
         )}
         {notice && (

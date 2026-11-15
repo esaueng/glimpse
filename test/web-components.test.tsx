@@ -296,6 +296,7 @@ describe("Monitoring pages", () => {
     expect(one).toContain("OpenFEA");
     // Cloud totals belong to OpenZCAD.
     expect(one).toMatch(/Cloud accounts<\/dt><dd>N\/A/);
+    expect(one).toContain("Diagnostics · opt-in");
   });
   it("lists connected sources with their latest data and planned ones as planned", () => {
     const out = html(<Sources data={load("all")} navigate={() => {}} />);
