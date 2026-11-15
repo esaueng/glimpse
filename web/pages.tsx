@@ -23,6 +23,10 @@ import {
   type Attention,
 } from "./health";
 import { SlowOperations } from "./views";
+import { useState } from "react";
+import { useLoader } from "./hooks";
+import { ago } from "./inbox";
+import type { IssuesClient, NewSecret } from "./issues-api";
 import { Panel, Tile } from "./ui";
 
 export type Navigate = (view: string, app?: string) => void;
@@ -88,7 +92,7 @@ function HealthCard({ health, onOpen }: { health: AppHealth; onOpen: () => void 
 const severityLabel: Record<Attention["severity"], string> = {
   critical: "Critical",
   warning: "Warning",
-  info: "Note",
+  info: "Info",
 };
 
 function AttentionList({ items, navigate, app }: { items: Attention[]; navigate: Navigate; app: string }) {
@@ -122,10 +126,60 @@ function AttentionList({ items, navigate, app }: { items: Attention[]; navigate:
   );
 }
 
-export function Home({ data, app, navigate }: { data: Loaded; app: string; navigate: Navigate }) {
+/** Active inbox issues as attention items: each open error, and one line for open scans. */
+export function issueAttention(list: Awaited<ReturnType<IssuesClient["list"]>> | null): Attention[] {
+  if (!list) return [];
+  const open = list.issues.filter((i) => i.status === "open");
+  const items: Attention[] = open
+    .filter((i) => i.severity !== "info")
+    .slice(0, 5)
+    .map((i) => ({
+      id: `issue:${i.id}`,
+      severity: i.severity === "critical" ? "critical" : "warning",
+      app: (APPS as readonly string[]).includes(i.app ?? "") ? (i.app as App) : undefined,
+      title: i.title,
+      detail: `${[i.service, `${number(i.occurrences)} occurrences`, `${ago(i.last_seen)} ago`].filter(Boolean).join(" · ")}`,
+      view: "issues",
+    }));
+  const quiet = open.filter((i) => i.severity === "info");
+  if (quiet.length)
+    items.push({
+      id: "issue:low",
+      severity: "info",
+      title: `${quiet.length} low-risk issue${quiet.length > 1 ? "s" : ""} open`,
+      detail: quiet.some((i) => i.category === "security") ? "Mostly vulnerability scans" : "Low severity",
+      view: "issues",
+    });
+  return items;
+}
+
+export function Home({
+  data,
+  app,
+  navigate,
+  issues,
+}: {
+  data: Loaded;
+  app: string;
+  navigate: Navigate;
+  issues?: IssuesClient;
+}) {
+  const inbox = useLoader(
+    (signal) => (issues ? issues.list({ status: "active", app, category: "" }, signal) : Promise.resolve(null)),
+    [issues, app],
+    // The inbox is optional on Home: without it the aggregate signals still show.
+    { enabled: !!issues, errorMessage: () => "" },
+  );
+  const rank = { critical: 0, warning: 1, info: 2 };
   const apps = inScope(app),
-    health = apps.map((a) => appHealth(data, a)),
-    items = attention(data, app),
+    // An open critical issue from a source marks a healthy app degraded.
+    critical = new Set(
+      (inbox.data?.issues ?? []).filter((i) => i.status === "open" && i.severity === "critical").map((i) => i.app),
+    ),
+    health = apps
+      .map((a) => appHealth(data, a))
+      .map((h): AppHealth => (h.status === "healthy" && critical.has(h.app) ? { ...h, status: "degraded" } : h)),
+    items = [...issueAttention(inbox.data), ...attention(data, app)].sort((a, b) => rank[a.severity] - rank[b.severity]),
     optional = data.optional.rows,
     census = app === "all" || app === "openzcad" ? latestCensus(data.optional.census) : undefined,
     series = dailySeries(data.basic, "api_request"),
@@ -141,7 +195,7 @@ export function Home({ data, app, navigate }: { data: Loaded; app: string; navig
             App health
           </h2>
           <span className="muted small">
-            Degraded ≥{percent(ERROR_RATE.degraded, 1, 0)} errors or ≥{percent(SLOW_SHARE, 1, 0)} over 1 s · Failing ≥
+            Degraded ≥{percent(ERROR_RATE.degraded, 1, 0)} errors, ≥{percent(SLOW_SHARE, 1, 0)} over 1 s or an open critical issue · Failing ≥
             {percent(ERROR_RATE.failing, 1, 0)} errors · *opted-in users
           </span>
         </div>
@@ -398,7 +452,192 @@ function SourceList({ sources, navigate }: { sources: Source[]; navigate: Naviga
 }
 
 /** Expects data for all apps: the dashboard ignores the app filter on this page. */
-export function Sources({ data, navigate }: { data: Loaded; navigate: Navigate }) {
+function Copy({ value, label }: { value: string; label: string }) {
+  const [done, setDone] = useState(false);
+  return (
+    <span className="copy-field">
+      <code>{value}</code>
+      <button
+        type="button"
+        onClick={async () => {
+          try {
+            await navigator.clipboard.writeText(value);
+            setDone(true);
+            setTimeout(() => setDone(false), 1500);
+          } catch {
+            setDone(false);
+          }
+        }}
+      >
+        {done ? "Copied" : "Copy"}
+        <span className="sr-only"> {label}</span>
+      </button>
+    </span>
+  );
+}
+
+function Setup({ secret, onDone }: { secret: NewSecret; onDone: () => void }) {
+  return (
+    <div className="setup" role="region" aria-label="Webhook setup">
+      <p>
+        <strong>Copy the secret now.</strong> It is shown once.
+      </p>
+      <dl>
+        <div>
+          <dt>Webhook URL</dt>
+          <dd>
+            <Copy value={secret.url} label="webhook URL" />
+          </dd>
+        </div>
+        <div>
+          <dt>Secret</dt>
+          <dd>
+            <Copy value={secret.secret} label="secret" />
+          </dd>
+        </div>
+      </dl>
+      <ol className="steps">
+        <li>
+          In Cloudflare, open each Worker → <b>Issues</b> → <b>Automations</b> → <b>Add automation</b>, and choose a{" "}
+          <b>Generic webhook</b> destination with this URL and secret.
+        </li>
+        <li>
+          In Zero Trust → Access → Applications → Glimpse, add a <b>Bypass</b> policy for the path <code>/hooks/</code>.
+          Glimpse checks the secret itself.
+        </li>
+        <li>
+          Keep <code>observability.issues.enabled: true</code> in each Worker's Wrangler config.
+        </li>
+      </ol>
+      <button type="button" onClick={onDone}>
+        Done
+      </button>
+    </div>
+  );
+}
+
+function Webhooks({ client, demo }: { client: IssuesClient; demo: boolean }) {
+  const { data, error, refresh } = useLoader((signal) => client.sources(signal), [client], {
+    errorMessage: (e) => (e instanceof Error ? e.message : "Sources unavailable"),
+  });
+  const [secret, setSecret] = useState<NewSecret | null>(null),
+    [busy, setBusy] = useState(false),
+    [failed, setFailed] = useState("");
+  const run = async (work: () => Promise<NewSecret | null | void>) => {
+    setBusy(true);
+    setFailed("");
+    try {
+      const result = await work();
+      if (result) setSecret(result);
+      refresh();
+    } catch (e) {
+      setFailed(e instanceof Error ? e.message : "Change not saved");
+    } finally {
+      setBusy(false);
+    }
+  };
+  const labels = new Map(data?.kinds.map((k) => [k.kind, k.label]));
+  return (
+    <Panel
+      title="Webhooks"
+      note={
+        !demo && (
+          <button
+            type="button"
+            className="primary small-button"
+            disabled={busy || !!error}
+            onClick={() => run(() => client.createSource("cloudflare-issues", "Workers Issues"))}
+          >
+            Connect Workers Issues
+          </button>
+        )
+      }
+    >
+      {secret && <Setup secret={secret} onDone={() => setSecret(null)} />}
+      {error ? (
+        <p className="error-message">{error}</p>
+      ) : !data ? (
+        <p className="muted small">Loading…</p>
+      ) : !data.sources.length ? (
+        <p className="muted">No webhooks yet. Connect Workers Issues to fill the inbox.</p>
+      ) : (
+        <ul className="sources">
+          {data.sources.map((s) => {
+            const state = s.last_received ? "live" : "quiet";
+            return (
+              <li key={s.id}>
+                <div className="source-main">
+                  <strong>{s.name}</strong>
+                  <span className="muted small">
+                    {labels.get(s.kind) ?? s.kind} · {number(s.received)} received
+                    {s.rejected ? ` · ${number(s.rejected)} rejected` : ""}
+                  </span>
+                  {s.last_status === "unrecognised payload" && s.shape && (
+                    <span className="muted small">
+                      Unrecognised keys: <code>{(JSON.parse(s.shape) as string[]).slice(0, 12).join(", ")}</code>
+                    </span>
+                  )}
+                </div>
+                <span className="source-kind">Webhook · push</span>
+                <span className={`source-state ${state}`}>
+                  <i aria-hidden="true" />
+                  {s.last_received ? `${ago(s.last_received)} ago` : "Waiting"}
+                  {s.last_status && <span className="muted small">{s.last_status}</span>}
+                </span>
+                {demo ? (
+                  <span />
+                ) : (
+                  <span className="source-actions">
+                    <button
+                      type="button"
+                      className="icon-link"
+                      title="New secret"
+                      disabled={busy}
+                      onClick={() => run(() => client.sourceAction(s.id, "rotate"))}
+                    >
+                      <span aria-hidden="true">↻</span>
+                      <span className="sr-only">New secret for {s.name}</span>
+                    </button>
+                    <button
+                      type="button"
+                      className="icon-link"
+                      title="Remove"
+                      disabled={busy}
+                      onClick={() => {
+                        if (confirm(`Remove ${s.name}? Deliveries stop being accepted; its issues stay.`))
+                          void run(() => client.sourceAction(s.id, "delete"));
+                      }}
+                    >
+                      <span aria-hidden="true">×</span>
+                      <span className="sr-only">Remove {s.name}</span>
+                    </button>
+                  </span>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+      )}
+      {failed && (
+        <p className="error-message small" role="alert">
+          {failed}
+        </p>
+      )}
+    </Panel>
+  );
+}
+
+export function Sources({
+  data,
+  navigate,
+  issues,
+  demo = false,
+}: {
+  data: Loaded;
+  navigate: Navigate;
+  issues?: IssuesClient;
+  demo?: boolean;
+}) {
   const last = (app: App) => {
     const days = [...data.basic.rows, ...data.optional.rows].filter((r) => r.app === app).map((r) => r.day).sort();
     return days.at(-1);
@@ -435,13 +674,17 @@ export function Sources({ data, navigate }: { data: Loaded; navigate: Navigate }
     },
   ];
   const planned: Source[] = [
-    {
-      name: "Cloudflare Workers Issues",
-      kind: "Webhook · push",
-      detail: "Grouped Worker errors and scans",
-      state: "planned",
-      status: "",
-    },
+    ...(issues
+      ? []
+      : [
+          {
+            name: "Cloudflare Workers Issues",
+            kind: "Webhook · push",
+            detail: "Grouped Worker errors and scans",
+            state: "planned",
+            status: "",
+          } satisfies Source,
+        ]),
     {
       name: "Worker performance",
       kind: "Scheduled pull",
@@ -487,6 +730,7 @@ export function Sources({ data, navigate }: { data: Loaded; navigate: Navigate }
   ];
   return (
     <>
+      {issues && <Webhooks client={issues} demo={demo} />}
       <Panel title="Connected" note="Latest data in range">
         <SourceList sources={connected} navigate={navigate} />
       </Panel>

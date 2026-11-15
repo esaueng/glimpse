@@ -37,7 +37,9 @@ for (const [, asset] of assets) {
   if (asset.endsWith(".js")) {
     const source = await readFile(file, "utf8");
     assert(
-      !source.includes("/api/stats") && !source.includes("/api/cloudflare"),
+      !["/api/stats", "/api/cloudflare", "/api/issues", "/api/sources"].some((path) =>
+        source.includes(path),
+      ),
       "Demo must never bundle the production API loader",
     );
     assert(

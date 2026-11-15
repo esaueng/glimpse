@@ -45,7 +45,8 @@ Pages:
 - Home, health: one card per app in scope with a status (Healthy, Degraded,
   Failing, No traffic), API requests with a daily sparkline, server-error share,
   share of API requests at 1 s or more, diagnostics and the last day with data.
-  Degraded at 1% server errors or 10% of timed requests at 1 s or more; failing at
+  Degraded at 1% server errors, 10% of timed requests at 1 s or more, or an open
+  critical inbox issue; failing at
   5% server errors (`web/health.ts`; the thresholds are stated on the page). A
   "Needs attention" list ranks signals as critical, warning or note, each with
   its evidence and a link to the page that explains it: error rate, slow
@@ -58,7 +59,10 @@ Pages:
   timed requests under 100 ms and at 1 s or more; daily requests by app and daily
   error rate; API response-time ranges per app; and the slow-operations panel
   (moved from Issues).
-- Sources: connected sources (each app's analytics binding with its last data
+- Sources: Webhooks first: Connect Workers Issues shows the URL and the secret
+  once, with copy buttons and the setup steps. Rows show received and rejected
+  counts, last delivery and status, unrecognised key paths, and actions to
+  rotate the secret or remove the source. Then connected sources (each app's analytics binding with its last data
   day, OpenZCAD cloud snapshots, Cloudflare usage and billing with a link to
   Costs) and planned ones, each with its delivery method (push, pull, probe)
   and state. Planned sources are labelled Planned and never shown as data.
@@ -74,7 +78,15 @@ Pages:
   solver backend, and model complexity: part-count ranges (OpenZCAD and OpenFEA)
   and lattice cell-count ranges (OpenLattice3D), each with an N/A row when the
   filter excludes its apps.
-- Issues: a six-cell stat strip of server errors with error rate, diagnostic codes, failed exports,
+- Issues, inbox first: grouped problems from webhook sources, with Active
+  (open and acknowledged), Resolved and Ignored tabs showing counts, and All,
+  Errors and Security filters. The app filter applies. Rows show severity,
+  title, Worker and app, occurrences, time since last seen and status, and
+  expand to show first and last seen, error type, stack frames, note, recent
+  activity, a note field and the actions for the status (Acknowledge, Resolve,
+  Ignore, Reopen), plus a Cloudflare link. With no source it offers "Connect
+  Workers Issues". Then "App diagnostics":
+  a six-cell stat strip of server errors with error rate, diagnostic codes, failed exports,
   solver runs and generations with failure rates, cloud request failures.
   Daily server-error and diagnostic charts, ranked diagnostic codes (all three
   apps), cloud status ranking, the local report inspector, and a collapsed table

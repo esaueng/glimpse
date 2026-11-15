@@ -45,15 +45,18 @@ D1 database, service bindings, ingestion, or credentials. Its files stay under
 - **Usage:** utilization — opted-in cloud accounts, projects, and revisions
   with growth, an account-activity row (not collected yet), workspaces opened, per-app activity, top CAD operations, feature
   categories, simulation workflow steps, and model complexity.
-- **Issues:** server errors, diagnostic codes, failed exports, solves, and
-  generations, cloud request failures, and a local JSON report inspector with
-  file and paste support.
+- **Issues:** an inbox of grouped problems from connected sources, starting
+  with Cloudflare Workers Issues, with Active, Resolved and Ignored tabs, error
+  and security filters, stack frames, notes and triage actions. Below it are
+  app diagnostics: server errors, diagnostic codes, failed exports, solves and
+  generations, cloud request failures, and a local JSON report inspector.
 - **Storage:** OpenZCAD cloud storage, growth, project sizes, and snapshot
   history; saved, upload, and download size observations.
 - **Privacy:** collection definitions, consent scopes, retention, and measurement
   limits alongside the numbers.
-- **Sources:** each connected data source with its latest data, and the
-  sources planned next.
+- **Sources:** webhooks (connect Workers Issues, rotate secrets, see last
+  delivery), each connected data source with its latest data, and the sources
+  planned next.
 - **Costs:** Esau metered costs, subscriptions, app/resource usage, allocated
   cost estimates, budgets and collection coverage. See the
   [connection and rollout guide](docs/CLOUDFLARE.md); activation is separate.
@@ -91,6 +94,8 @@ flowchart LR
   App[Application Worker] -->|Fixed app service binding| Worker[Glimpse Worker]
   Worker --> DB[(D1 aggregates)]
   Dashboard -->|Cloudflare Access + verified JWT| Worker
+  CF[Cloudflare Workers Issues] -->|Webhook + per-source secret| Worker
+  Worker --> Inbox[(D1 issue inbox)]
   Report[User-shared JSON] --> Inspector[Local report inspector]
 ```
 
