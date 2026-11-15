@@ -247,3 +247,43 @@ rejected from OpenZCAD and OpenFEA. Local reports (`schema: 2`) accept
    site for is simply never sent).
 3. Glimpse deployed with this allowlist before the OpenLattice3D adapter
    ships; earlier Glimpse versions reject these events.
+
+## Review: issue inbox (Workers Issues webhook)
+
+Recorded 15 November 2026. The owner chose option B on that date: keep what explains
+a failure, never what identifies a person or a request. This is the fresh design review
+that [Transport and operational limits](#transport-and-operational-limits) requires
+before any error text or stack is stored. It covers the owner's own infrastructure
+errors, not browser analytics, and changes no app consent scope. It is not a legal
+review.
+
+**Source and path.** Cloudflare Workers Issues sends grouped Worker failures through a
+Cloudflare Notifications generic webhook to `/hooks/<source id>`. The path is outside
+Access (a path-scoped Access bypass), so each source has a random 32-byte secret, sent
+by Cloudflare in `cf-webhook-auth`. Glimpse stores only its SHA-256 hash, compares in
+constant time, and gives the same 401 for an unknown source and a wrong secret. Bodies
+are capped at 64 KiB. Nothing reaches the aggregate analytics tables.
+
+**Stored** (`issues`, `issue_events`, `sources`; migration `0006_issues.sql`): the
+Worker name, mapped app, category, severity, a scrubbed title of at most 200
+characters, the error type, at most 15 stack frames reduced to function, file name, line
+and column, occurrence and delivery counts, first and last seen times, a Cloudflare
+dashboard link without its query string, the status, an optional owner note, and an
+activity log of deliveries and status changes. The actor is a role ("dashboard",
+later "agent"), never a person. For an unrecognised payload only its key paths are
+kept, never values, so the adapter can be fixed.
+
+**Scrubbed before storage** (`src/sources/scrub.ts`): emails, IPv4 and IPv6
+addresses, JWTs and `token=`/`secret=`/`password=`/`auth` values, query strings and
+fragments, UUIDs, hex and other long identifiers, and numbers of six or more digits.
+Stack lines that are not frames, which is where messages sit, are dropped.
+
+**Never stored:** request or response bodies, headers, cookies, client IPs, user
+agents, full URLs, log lines, trace attributes, or the raw payload.
+
+**Residual risk.** A title can still carry a short user-supplied value that matches no
+pattern, such as a name in an error message. Keep Worker error messages free of user
+data, and treat titles as possibly personal. **Retention:** open and acknowledged
+issues stay until closed. Resolved and ignored issues, and activity, are deleted 90
+days after they were last seen, by the daily `31 3 * * *` job. **Access:** dashboard
+reads and writes require Access; changes must be same-origin JSON.

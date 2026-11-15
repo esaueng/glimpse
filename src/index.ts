@@ -13,6 +13,7 @@ import { cloudflareApi } from "./cloudflare/api";
 import { logFailure } from "./errors";
 import { migrationPending, missingMigrations } from "./migrations";
 import { runScheduled } from "./schedule";
+import { HOOK_PREFIX, hook, issuesApi } from "./sources/api";
 export async function record(
   env: Pick<Env, "DB">,
   app: App,
@@ -122,6 +123,18 @@ export default {
     const url = new URL(request.url);
     if (url.pathname === "/healthz" && ["GET", "HEAD"].includes(request.method))
       return protect(new Response(request.method === "HEAD" ? null : "ok"));
+    // Source webhooks authenticate with their own secret, so they sit outside Access (a
+    // path-scoped Access bypass is required in production). Nothing else is reachable here.
+    if (url.pathname.startsWith(HOOK_PREFIX)) {
+      try {
+        if ((await missingMigrations(env.DB, "issues")).length)
+          return protect(new Response("Unavailable", { status: 503, headers: { "Retry-After": "300" } }));
+        return protect(await hook(request, env.DB));
+      } catch (error) {
+        logFailure("Webhook failed", error);
+        return protect(new Response("Unavailable", { status: 503 }));
+      }
+    }
     const result = await access(request, env);
     if (result === "unavailable")
       return protect(
@@ -150,6 +163,22 @@ export default {
             },
             { status: 503 },
           ),
+        );
+      }
+    }
+    if (
+      ["/api/issues", "/api/sources"].some(
+        (p) => url.pathname === p || url.pathname.startsWith(`${p}/`),
+      )
+    ) {
+      try {
+        const missing = await missingMigrations(env.DB, "issues");
+        if (missing.length) return protect(migrationPending(missing));
+        return protect(await issuesApi(request, env.DB));
+      } catch (error) {
+        logFailure("Issues request failed", error);
+        return protect(
+          Response.json({ error: "Issues unavailable" }, { status: 503 }),
         );
       }
     }

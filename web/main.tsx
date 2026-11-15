@@ -4,6 +4,7 @@ import { Dashboard, ErrorBoundary } from "./Dashboard";
 import type { Range, Stats } from "./data";
 import type { CloudflareData } from "../src/cloudflare/model";
 import { responseError } from "./api";
+import { liveIssues } from "./issues-api";
 async function loadCloudflare(signal: AbortSignal): Promise<CloudflareData> {
   const response = await fetch("/api/cloudflare", {
     cache: "no-store",
@@ -52,6 +53,7 @@ createRoot(document.getElementById("root")!).render(
         loadStats={loadStats}
         loadCloudflare={loadCloudflare}
         writeCloudflare={writeCloudflare}
+        issues={liveIssues}
       />
     </ErrorBoundary>
   </React.StrictMode>,

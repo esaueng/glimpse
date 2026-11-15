@@ -21,6 +21,8 @@ import {
 } from "./ranges";
 import { Issues, Storage, Usage } from "./views";
 import { Home, Performance, Sources } from "./pages";
+import { Inbox } from "./inbox";
+import type { IssuesClient } from "./issues-api";
 import type { MonitorLoader, SettingsWriter } from "./Cloudflare";
 import "./style.css";
 // The Cloudflare monitor is a separate page; load its code only when opened.
@@ -178,9 +180,11 @@ export function Dashboard({
   loadStats,
   loadCloudflare,
   writeCloudflare,
+  issues,
   demo = false,
 }: {
   loadStats: (range: Range, signal: AbortSignal) => Promise<Stats>;
+  issues?: IssuesClient;
   loadCloudflare?: MonitorLoader;
   writeCloudflare?: SettingsWriter;
   demo?: boolean;
@@ -452,10 +456,16 @@ export function Dashboard({
               aria-busy={loading}
             >
               {view === "home" && (
-                <Home data={data} app={applied.app} navigate={navigate} />
+                <Home data={data} app={applied.app} navigate={navigate} issues={issues} />
               )}
               {view === "issues" && (
-                <Issues data={data} app={applied.app} demo={demo} />
+                <>
+                  {issues && (
+                    <Inbox client={issues} app={applied.app} onConnect={() => navigate("sources")} />
+                  )}
+                  <h2 className="section-title">App diagnostics</h2>
+                  <Issues data={data} app={applied.app} demo={demo} />
+                </>
               )}
               {view === "performance" && (
                 <Performance data={data} app={applied.app} />
@@ -464,7 +474,9 @@ export function Dashboard({
               {view === "storage" && (
                 <Storage data={data} app={applied.app} />
               )}
-              {view === "sources" && <Sources data={data} navigate={navigate} />}
+              {view === "sources" && (
+                <Sources data={data} navigate={navigate} issues={issues} demo={demo} />
+              )}
             </div>
           ) : (
             !loading && <p className="notice">No data loaded.</p>

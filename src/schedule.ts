@@ -3,6 +3,7 @@ import { RETENTION_SOURCE } from "./cloudflare/model";
 import { coverage } from "./cloudflare/store";
 import type { MonitorEnv } from "./cloudflare/env";
 import { logFailure } from "./errors";
+import { retainIssues } from "./sources/store";
 // Must match wrangler.jsonc triggers.crons; test/schedule.test.ts enforces this.
 export const RETENTION_CRON = "31 3 * * *";
 export const COLLECT_CRON = "17 * * * *";
@@ -28,6 +29,12 @@ export async function retain(env: Pick<MonitorEnv, "DB">, now = new Date()) {
   } catch (error) {
     await record("unavailable", "Retention failed; expired rows remain hidden.");
     throw error;
+  }
+  try {
+    await retainIssues(env.DB);
+  } catch (error) {
+    // Migration 0006 may not be applied yet; analytics retention above still ran.
+    if (!/no such table/i.test(String(error))) logFailure("Issue retention failed", error);
   }
   await record("ok", "Expired analytics removed (90-day window).");
 }

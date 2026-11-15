@@ -74,6 +74,38 @@ and that an opt-in `/api/stats` read has no `pendingMigrations`. Rollback: the
 columns are additive and nullable; leave them in place and stop the adapter
 sending the counts. Record the result in the [validation ledger](VALIDATION.md).
 
+## Issue inbox and Workers Issues (migration 0006)
+
+`0006_issues.sql` adds `sources`, `issues` and `issue_events` (see the
+[privacy review](PRIVACY.md#review-issue-inbox-workers-issues-webhook)). It blocks only
+`/api/issues`, `/api/sources` and `/hooks/*`, which return 503 until it is applied.
+Analytics and the Costs page are unaffected. Each step needs authorization:
+
+1. Apply the migration to Preview, then Production:
+
+   ```sh
+   npx wrangler d1 migrations apply PREVIEW_DB --remote --config wrangler.preview-migrations.jsonc
+   npx wrangler d1 migrations apply DB --remote
+   ```
+
+2. In Zero Trust → Access → Applications → Glimpse, add a **Bypass** policy for the path
+   `glimpse.esau.app/hooks/`. Keep every other path behind the owner policy. Check that
+   `/` and `/api/issues` still require Access, and that `/hooks/x` returns 401 rather
+   than a login page.
+3. Open Glimpse → Sources → **Connect Workers Issues**. Copy the webhook URL and secret;
+   the secret is shown once. Rotate it from the same row.
+4. For each Worker, open Cloudflare → Workers & Pages → the Worker → **Issues** →
+   **Automations** → **Add automation**. Choose a trigger, then a **Generic webhook**
+   destination with the URL and the secret. Use **Send test**; Sources shows "test
+   received".
+5. Keep `observability.issues.enabled: true` in each Worker's Wrangler config.
+   Otherwise the next deploy turns Issues off.
+
+The Issues payload is not documented by Cloudflare. The adapter reads the documented
+notification envelope and likely `data` fields. If a delivery is not recognised,
+Sources shows its key paths (never values); update `src/sources/model.ts` to match.
+Record the first real delivery in the [validation ledger](VALIDATION.md).
+
 ## OpenLattice3D rollout
 
 The third-app change includes `0002_openlattice3d.sql`; it is now applied to Production and the isolated Preview database. The migration rebuilds the app CHECK constraint, copying all seven existing columns, counts and primary keys unchanged. The local Worker/D1 regression upgrades a populated v1 database and verifies preservation, RPC app isolation, rejection of unknown app values and combined reads.
