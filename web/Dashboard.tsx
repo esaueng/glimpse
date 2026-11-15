@@ -57,16 +57,6 @@ function readLocation(): { range: Scope; view: View; notice: string } {
   };
 }
 const pageOf = (view: View) => pages.find((p) => p.id === view)!;
-const subtitles: Record<View, string> = {
-  home: "App health and what needs attention",
-  issues: "Server errors, diagnostics and failed operations",
-  performance: "Traffic, error rates and response times",
-  usage: "How the apps and cloud accounts are used",
-  storage: "Cloud storage, project sizes and transfers",
-  costs: "Cloudflare usage, billing and budgets",
-  sources: "Where Glimpse gets its data",
-  privacy: "What is collected and what never is",
-};
 function Icon({ d }: { d: string }) {
   return (
     <svg className="nav-icon" viewBox="0 0 24 24" aria-hidden="true">
@@ -353,90 +343,82 @@ export function Dashboard({
       <main id="content" tabIndex={-1}>
         {demo && (
           <aside className="demo-banner" aria-label="Demo information">
-            <div>
-              <strong>Explore Glimpse</strong>
-              <p>
-                All numbers are made up. Try the filters, storage charts, and
-                issues. This demo never connects to live analytics.
-              </p>
-            </div>
+            <strong>Demo</strong>
+            <span>All numbers are made up. No live connection.</span>
             <a
               className="banner-link"
               href="https://github.com/esaueng/glimpse"
               target="_blank"
               rel="noreferrer"
             >
-              View on GitHub <span aria-hidden="true">↗</span>
+              GitHub <span aria-hidden="true">↗</span>
               <span className="sr-only"> (opens in a new tab)</span>
             </a>
           </aside>
         )}
         <div className="page-head">
-          <div className="page-title">
-            <h1 ref={heading} tabIndex={-1}>
-              {page.title}
-            </h1>
-            <p className="muted">{subtitles[view]}</p>
-          </div>
+          <h1 ref={heading} tabIndex={-1}>
+            {page.title}
+          </h1>
           {analyticsView && (
-            <div className="refresh">
-              <span className="status" role="status" aria-live="polite">
-                {loading
-                  ? "Loading…"
-                  : error
-                    ? "Refresh failed"
-                    : data
-                      ? `${demo ? "Synthetic · " : ""}Updated ${utcTime(data.basic.receivedAt)} UTC`
-                      : "Awaiting data"}
-              </span>
-              <button
-                type="button"
-                aria-label="Refresh"
-                title="Refresh"
-                // aria-disabled keeps focus on the button while loading.
-                aria-disabled={loading}
-                className={loading ? "is-spinning" : undefined}
-                onClick={() => {
-                  if (loading) return;
-                  setLocation((current) => ({
-                    ...current,
-                    range: {
-                      ...current.range,
-                      ...refreshedTimeframe(current.range),
-                    },
-                  }));
-                  refresh();
-                }}
-              >
-                <svg viewBox="0 0 24 24" aria-hidden="true">
-                  <path d="M21 12a9 9 0 1 1-3-6.7L21 8" />
-                  <path d="M21 3v5h-5" />
-                </svg>
-              </button>
+            <div className="controls">
+              <RangePicker
+                value={filter}
+                onChange={(t) => apply({ app: filter.app, ...t })}
+              />
+              {view !== "sources" && (
+                <div className="app-filter" role="group" aria-label="App">
+                  {appChoices.map(([id, name]) => (
+                    <button
+                      key={id}
+                      type="button"
+                      aria-pressed={filter.app === id}
+                      onClick={() => apply({ ...filter, app: id })}
+                    >
+                      {id !== "all" && <span className={`swatch ${id}`} aria-hidden="true" />}
+                      {name}
+                    </button>
+                  ))}
+                </div>
+              )}
+              <div className="refresh">
+                <span className="status" role="status" aria-live="polite">
+                  {loading
+                    ? "Loading…"
+                    : error
+                      ? "Refresh failed"
+                      : data
+                        ? `${utcTime(data.basic.receivedAt)} UTC`
+                        : ""}
+                </span>
+                <button
+                  type="button"
+                  aria-label={data ? `Refresh, updated ${utcTime(data.basic.receivedAt)} UTC` : "Refresh"}
+                  title="Refresh"
+                  // aria-disabled keeps focus on the button while loading.
+                  aria-disabled={loading}
+                  className={loading ? "is-spinning" : undefined}
+                  onClick={() => {
+                    if (loading) return;
+                    setLocation((current) => ({
+                      ...current,
+                      range: {
+                        ...current.range,
+                        ...refreshedTimeframe(current.range),
+                      },
+                    }));
+                    refresh();
+                  }}
+                >
+                  <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M21 12a9 9 0 1 1-3-6.7L21 8" />
+                    <path d="M21 3v5h-5" />
+                  </svg>
+                </button>
+              </div>
             </div>
           )}
         </div>
-        {analyticsView && (
-          <div className="controls">
-            <RangePicker
-              value={filter}
-              onChange={(t) => apply({ app: filter.app, ...t })}
-            />
-            {view !== "sources" && <div className="app-filter" role="group" aria-label="App">
-              {appChoices.map(([id, name]) => (
-                <button
-                  key={id}
-                  type="button"
-                  aria-pressed={filter.app === id}
-                  onClick={() => apply({ ...filter, app: id })}
-                >
-                  {id !== "all" && <span className={`swatch ${id}`} aria-hidden="true" />}
-                  {name}
-                </button>
-              ))}
-            </div>}
-          </div>
-        )}
         {notice && (
           <div className="range-notice" role="status" data-range-notice>
             <p>{notice}</p>
@@ -445,22 +427,10 @@ export function Dashboard({
             </button>
           </div>
         )}
-        {analyticsView && (
-          <p className="scope">
-            {error ? (
-              <span className="error-message" role="alert">
-                {error}
-                {data
-                  ? " Showing stale results for the last successful scope."
-                  : ""}
-              </span>
-            ) : (
-              <>
-                {appName(applied.app)} · {formatRange(applied.from, applied.to)}{" "}
-                UTC · Basic counts cover all users; opt-in figures cover
-                opted-in users only.
-              </>
-            )}
+        {analyticsView && error && (
+          <p className="scope error-message" role="alert">
+            {error}
+            {data ? " Showing the last successful results." : ""}
           </p>
         )}
         <ErrorBoundary compact resetKey={`${view}:${app}:${from}:${to}`}>
@@ -500,13 +470,6 @@ export function Dashboard({
             !loading && <p className="notice">No data loaded.</p>
           )}
         </ErrorBoundary>
-        <footer>
-          <span>No model contents, visitor IDs, or individual timelines.</span>
-          <span>
-            Glimpse ·{" "}
-            {demo ? "public demo · synthetic data" : "private analytics"}
-          </span>
-        </footer>
       </main>
     </div>
   );

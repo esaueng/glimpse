@@ -296,12 +296,13 @@ describe("Monitoring pages", () => {
     expect(one).toContain("OpenFEA");
     // Cloud totals belong to OpenZCAD.
     expect(one).toMatch(/Cloud accounts<\/dt><dd>N\/A/);
-    expect(one).toContain("Diagnostics · opt-in");
+    expect(one).toContain("Diagnostics*");
+    expect(one).toContain("*opted-in users");
   });
   it("lists connected sources with their latest data and planned ones as planned", () => {
     const out = html(<Sources data={load("all")} navigate={() => {}} />);
     expect(out).toContain("OpenZCAD analytics");
-    expect(out).toContain("last data");
+    expect(out).toContain("Receiving");
     expect(out).toContain("Cloudflare Workers Issues");
     expect(out.match(/source-state planned/g)!.length).toBeGreaterThanOrEqual(5);
   });

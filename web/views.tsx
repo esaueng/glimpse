@@ -101,7 +101,7 @@ export function AccountActivity({ row, pending = false }: { row: CensusRow; pend
   return (
     <div className="panel-foot">
       <span className="muted small">
-        Account activity · consenting accounts · snapshot{" "}
+        Account activity · snapshot{" "}
         <span className="nowrap">{row.day} UTC</span>
       </span>
       <ul className="category-grid activity-grid">
@@ -121,9 +121,6 @@ export function AccountActivity({ row, pending = false }: { row: CensusRow; pend
                 <>
                   <span className="gap-value">
                     Withheld (fewer than {ACTIVITY_MIN_COUNT})
-                  </span>
-                  <span className="muted small">
-                    Too few accounts in or outside this count
                   </span>
                 </>
               ) : (
@@ -240,9 +237,6 @@ export function Usage({ data, app }: { data: Loaded; app: string }) {
           People and accounts
         </h2>
         <div className="strip">
-          <Tile label="Total users" value="Not collected" gap>
-            Glimpse keeps no per-person data.
-          </Tile>
           <Tile label="Opted-in cloud accounts" value={census("accounts")}>
             {change("accounts")}
           </Tile>
@@ -301,11 +295,6 @@ export function Usage({ data, app }: { data: Loaded; app: string }) {
                   </li>
                 ))}
               </ul>
-              <span className="muted small">
-                {history.length} snapshot{history.length === 1 ? "" : "s"} ·{" "}
-                {shortDay(first.day)} – {shortDay(latest.day)} · daily
-                history on Storage
-              </span>
               <AccountActivity
                 row={latest}
                 pending={(data.optional.pendingMigrations ?? []).includes(
@@ -373,7 +362,7 @@ export function Usage({ data, app }: { data: Loaded; app: string }) {
           <Panel
             level={3}
             title="Top CAD operations"
-            note={`OpenZCAD · ${number(operations.length)} kinds seen`}
+            note={`${number(operations.length)} kinds · OpenZCAD`}
             na={notApplicable(app, ["openzcad"])}
           >
             <RankBars items={operations.slice(0, 8)} />
@@ -414,7 +403,7 @@ export function Usage({ data, app }: { data: Loaded; app: string }) {
           <Panel
             level={3}
             title="Simulation workflow"
-            note="OpenFEA · independent step counts"
+            note="OpenFEA"
             na={notApplicable(app, ["openfea"])}
           >
             <Columns items={steps} tone="fea" />
@@ -436,7 +425,7 @@ export function Usage({ data, app }: { data: Loaded; app: string }) {
           <Panel
             level={3}
             title="Model complexity"
-            note="Coarse ranges · share of observations"
+            note="Share of observations"
           >
             {complexity.map((c, i) =>
               c.na ? (
@@ -482,8 +471,8 @@ const latencyRows: [string, "basic" | "optional", string, App[]?][] = [
 ];
 function rate(failed: number, completed: number) {
   return failed + completed
-    ? `${percent(failed, failed + completed)} of ${number(failed + completed)} attempts`
-    : "No attempts in this range";
+    ? `${percent(failed, failed + completed)} of ${number(failed + completed)}`
+    : "No attempts";
 }
 function EventTable({ rows }: { rows: Row[] }) {
   const values = grouped(rows, () => true);
@@ -549,7 +538,7 @@ export function Issues({
     <>
       <section className="strip" aria-label="Issue summary">
         <Tile label="Server errors (5xx)" value={number(serverErrors)}>
-          {percent(serverErrors, requests, 2)} of requests · all users
+          {percent(serverErrors, requests, 2)} of requests
         </Tile>
         <Tile label="App diagnostics" value={number(codeTotal)}>
           {APPS.filter((a) => includes(app, a))
@@ -582,7 +571,7 @@ export function Issues({
           label="Cloud request failures"
           value={includes(app, "openzcad") ? number(cloudFailures) : "N/A"}
         >
-          OpenZCAD · by status below
+          OpenZCAD
         </Tile>
       </section>
 
@@ -630,7 +619,7 @@ export function Issues({
       <div className="split">
         <Panel
           title="Diagnostic codes"
-          note="Opted-in users · fixed codes, never error text"
+          note={<OptIn />}
           className="wide"
         >
           <TableScroll label="Diagnostic codes">
@@ -647,13 +636,8 @@ export function Issues({
                 {codes.length ? (
                   codes.map((c) => (
                     <tr key={c.event}>
-                      <td title={c.event}>
+                      <td title={diagnosticHints[c.event as keyof typeof diagnosticHints] ?? c.event}>
                         {label(diagnosticLabels, c.event)}
-                        {c.event in diagnosticHints && (
-                          <span className="cell-hint">
-                            {diagnosticHints[c.event as keyof typeof diagnosticHints]}
-                          </span>
-                        )}
                       </td>
                       <td className="muted">{c.apps.map(appName).join(" · ")}</td>
                       <td className="numeric">{number(c.count)}</td>
@@ -906,7 +890,7 @@ export function Storage({ data, app }: { data: Loaded; app: string }) {
             <p className="empty">No snapshot received.</p>
           )}
           <p className="panel-note">
-            Current document bytes per OpenZCAD project. External assets are excluded.
+            Document bytes per project, excluding external assets.
           </p>
         </Panel>
         <Panel title="Size observations" note={<OptIn />}>
@@ -964,7 +948,7 @@ export function Storage({ data, app }: { data: Loaded; app: string }) {
             </div>
           )}
           <p className="panel-note">
-            Ranges per operation, not bandwidth. Repeated saves count again.
+            Per operation, not bandwidth.
           </p>
         </Panel>
       </div>
@@ -1009,9 +993,7 @@ export function Storage({ data, app }: { data: Loaded; app: string }) {
           </table>
         </TableScroll>
         <p className="panel-note">
-          Consenting accounts only. Owned projects including trash; stored R2 metadata plus D1
-          documents without R2 pointers. Excludes database overhead and backups. Not billable disk
-          usage.
+          Consenting accounts only. Not billable disk usage.
         </p>
       </Panel>
     </>

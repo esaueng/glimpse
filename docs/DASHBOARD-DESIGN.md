@@ -14,11 +14,14 @@ carried by pills and text. At 900px
 and below the sidebar becomes a sticky top bar with a menu button
 (`aria-expanded`, Escape closes) that reveals the same navigation.
 
-Page head: title with a one-line subtitle, last update and icon Refresh. Below
-it, the timeframe picker and a segmented app filter (All apps and one button per
-app, `aria-pressed`). Changes apply immediately. One applied-scope line states
-that basic counts cover all users and opt-in figures cover opted-in users only.
-Every opt-in panel carries an "Opted-in users" badge or note.
+Page head, one row: title on the left; timeframe picker, segmented app filter
+(All apps and one button per app, `aria-pressed`), last update time and icon
+Refresh on the right. Changes apply immediately. No subtitle, scope sentence or
+footer: the controls show the scope, and every opt-in panel or figure carries an
+"Opted-in users" badge or an asterisk explained on the page. A failed load shows
+one error line and keeps the last results. Copy stays short: labels and values,
+with explanations in `title` attributes or on Privacy. The demo shows a one-line
+"Demo · All numbers are made up." strip (the demo build check requires that text).
 
 URLs use `view=home|issues|performance|usage|storage|costs|sources|privacy`; the
 default is Home. Earlier links are rewritten in place: `overview` → Usage,
@@ -60,8 +63,7 @@ Pages:
   Costs) and planned ones, each with its delivery method (push, pull, probe)
   and state. Planned sources are labelled Planned and never shown as data.
   Sources always reads all apps; the app filter is hidden there.
-- Usage (formerly Overview), utilization: a five-cell stat strip with Total users shown as an
-  explicit "Not collected" gap; opted-in cloud accounts, projects and revisions
+- Usage (formerly Overview), utilization: a four-cell stat strip of opted-in cloud accounts, projects and revisions
   from the latest OpenZCAD snapshot with the change since the first snapshot in
   range; workspaces opened. Cloud growth as compact sparkline rows (accounts,
   projects, revisions, stored bytes with start, end and change) and, under them, an
@@ -124,7 +126,8 @@ for metrics Glimpse does not record, or that the snapshot did not carry (the not
 says whether OpenZCAD did not send it or migration 0005 is pending). A count held
 back by the k-threshold shows "Withheld (fewer than 5)", never a number.
 
-Mobile (≤760px): the app filter spans the width, the timeframe trigger and its
+Mobile (≤760px): the timeframe trigger and Refresh share a row, the app filter
+is a 2×2 grid, the timeframe trigger and its
 popover span the width, stat strips reflow, wide tables scroll inside labelled regions, slow-
 operation bars move under their labels. No horizontal page overflow.
 

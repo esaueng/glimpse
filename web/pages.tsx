@@ -51,6 +51,10 @@ function HealthCard({ health, onOpen }: { health: AppHealth; onOpen: () => void 
           {appName(app)}
         </h3>
         <StatusPill status={health.status} />
+        <button type="button" className="icon-link" onClick={onOpen} title="Performance">
+          <span aria-hidden="true">→</span>
+          <span className="sr-only">{appName(app)} performance</span>
+        </button>
       </header>
       <div className="health-main">
         <div>
@@ -73,18 +77,10 @@ function HealthCard({ health, onOpen }: { health: AppHealth; onOpen: () => void 
           </dd>
         </div>
         <div>
-          <dt>Diagnostics · opt-in</dt>
+          <dt>Diagnostics*</dt>
           <dd>{number(health.diagnostics)}</dd>
         </div>
       </dl>
-      <footer>
-        <span className="muted small">
-          {health.lastDay ? `Last data ${shortDay(health.lastDay)} UTC` : "No data in this range"}
-        </span>
-        <button type="button" className="link-button" onClick={onOpen}>
-          Performance<span className="sr-only"> for {appName(app)}</span> →
-        </button>
-      </footer>
     </article>
   );
 }
@@ -99,7 +95,7 @@ function AttentionList({ items, navigate, app }: { items: Attention[]; navigate:
   if (!items.length)
     return (
       <p className="all-clear">
-        <span aria-hidden="true">✓</span> Nothing needs attention in this range.
+        <span aria-hidden="true">✓</span> All clear
       </p>
     );
   return (
@@ -111,9 +107,14 @@ function AttentionList({ items, navigate, app }: { items: Attention[]; navigate:
             <strong>{item.title}</strong>
             <span className="muted small">{item.detail}</span>
           </div>
-          <button type="button" className="link-button" onClick={() => navigate(item.view, item.app ?? app)}>
-            {item.view === "sources" ? "Sources" : item.view === "performance" ? "Performance" : "Issues"}
-            <span className="sr-only"> for {item.title}</span> →
+          <button
+            type="button"
+            className="icon-link"
+            title={item.view === "sources" ? "Sources" : item.view === "performance" ? "Performance" : "Issues"}
+            onClick={() => navigate(item.view, item.app ?? app)}
+          >
+            <span aria-hidden="true">→</span>
+            <span className="sr-only">Open {item.view} for {item.title}</span>
           </button>
         </li>
       ))}
@@ -140,8 +141,8 @@ export function Home({ data, app, navigate }: { data: Loaded; app: string; navig
             App health
           </h2>
           <span className="muted small">
-            Healthy below {percent(ERROR_RATE.degraded, 1, 0)} server errors and {percent(SLOW_SHARE, 1, 0)} of
-            requests over 1 s · failing at {percent(ERROR_RATE.failing, 1, 0)} errors
+            Degraded ≥{percent(ERROR_RATE.degraded, 1, 0)} errors or ≥{percent(SLOW_SHARE, 1, 0)} over 1 s · Failing ≥
+            {percent(ERROR_RATE.failing, 1, 0)} errors · *opted-in users
           </span>
         </div>
         <div className="health-grid">
@@ -168,13 +169,6 @@ export function Home({ data, app, navigate }: { data: Loaded; app: string; navig
           }
         >
           <AttentionList items={items} navigate={navigate} app={app} />
-          <p className="panel-note">
-            Signals come from daily aggregates. Workers Issues, deploys and uptime checks will appear here once those{" "}
-            <button type="button" className="link-button inline" onClick={() => navigate("sources")}>
-              sources
-            </button>{" "}
-            are connected.
-          </p>
         </Panel>
         <Panel title="At a glance" className="narrow" note={<span className="badge">Opted-in users</span>}>
           <dl className="glance">
@@ -195,9 +189,6 @@ export function Home({ data, app, navigate }: { data: Loaded; app: string; navig
               <dd>{census ? bytes(census.storedBytes) : app === "all" || app === "openzcad" ? "—" : "N/A"}</dd>
             </div>
           </dl>
-          <button type="button" className="link-button" onClick={() => navigate("usage", app)}>
-            Usage details →
-          </button>
         </Panel>
       </div>
 
@@ -390,11 +381,12 @@ function SourceList({ sources, navigate }: { sources: Source[]; navigate: Naviga
           <span className={`source-state ${s.state}`}>
             <i aria-hidden="true" />
             {stateLabel[s.state]}
-            {s.status && <span className="muted small"> · {s.status}</span>}
+            {s.status && <span className="muted small">{s.status}</span>}
           </span>
           {s.action ? (
-            <button type="button" className="link-button" onClick={() => navigate(s.action!.view)}>
-              {s.action.label} →
+            <button type="button" className="icon-link" title={s.action.label} onClick={() => navigate(s.action!.view)}>
+              <span aria-hidden="true">→</span>
+              <span className="sr-only">Open {s.action.label}</span>
             </button>
           ) : (
             <span />
@@ -419,26 +411,26 @@ export function Sources({ data, navigate }: { data: Loaded; navigate: Navigate }
       return {
         name: `${appName(a)} analytics`,
         kind: "Service binding · push",
-        detail: "API counters for all users; opt-in product and diagnostic counts",
+        detail: "API counters; opt-in product counts",
         state: day ? "live" : "quiet",
-        status: day ? `last data ${shortDay(day)} UTC` : "",
+        status: day ? shortDay(day) : "",
         action: { label: "Usage", view: "usage" },
       };
     }),
     {
       name: "OpenZCAD cloud snapshots",
       kind: "Service binding · hourly",
-      detail: "Account, project, revision and storage totals from consenting accounts",
+      detail: "Account and storage totals",
       state: snapshot ? "live" : "quiet",
-      status: snapshot ? `last snapshot ${shortDay(snapshot)} UTC` : "",
+      status: snapshot ? shortDay(snapshot) : "",
       action: { label: "Storage", view: "storage" },
     },
     {
       name: "Cloudflare usage and billing",
       kind: "Scheduled pull · hourly",
-      detail: "Metered costs, subscriptions and per-resource usage for the Esau account",
+      detail: "Costs and resource usage",
       state: "elsewhere",
-      status: "coverage on Costs",
+      status: "",
       action: { label: "Costs", view: "costs" },
     },
   ];
@@ -446,60 +438,60 @@ export function Sources({ data, navigate }: { data: Loaded; navigate: Navigate }
     {
       name: "Cloudflare Workers Issues",
       kind: "Webhook · push",
-      detail: "Grouped Worker exceptions, failed invocations, 5xx and error logs, and vulnerability scans",
+      detail: "Grouped Worker errors and scans",
       state: "planned",
       status: "",
     },
     {
       name: "Worker performance",
       kind: "Scheduled pull",
-      detail: "Requests, errors and CPU and wall-time percentiles per Worker",
+      detail: "Requests, errors, CPU per Worker",
       state: "planned",
       status: "",
     },
     {
       name: "Deployments and Workers Builds",
       kind: "Scheduled pull",
-      detail: "Deploy markers on charts; failed builds become issues",
+      detail: "Deploy markers, failed builds",
       state: "planned",
       status: "",
     },
     {
       name: "GitHub",
       kind: "Webhook · push",
-      detail: "Failed Actions runs and Dependabot alerts",
+      detail: "Failed Actions, Dependabot alerts",
       state: "planned",
       status: "",
     },
     {
       name: "Uptime checks",
       kind: "Scheduled probe",
-      detail: "Glimpse requests each app's health endpoint every few minutes",
+      detail: "Health endpoint probes",
+      state: "planned",
+      status: "",
+    },
+    {
+      name: "Agent access (MCP)",
+      kind: "MCP · Access OAuth",
+      detail: "Claude and Codex read health and issues",
       state: "planned",
       status: "",
     },
     {
       name: "Custom source",
       kind: "Signed webhook",
-      detail: "Any service can send issues and metrics with its own secret",
+      detail: "Any service, own secret",
       state: "planned",
       status: "",
     },
   ];
   return (
     <>
-      <Panel title="Connected" note="Status in the selected range">
+      <Panel title="Connected" note="Latest data in range">
         <SourceList sources={connected} navigate={navigate} />
       </Panel>
-      <Panel title="Planned" note="Not connected yet">
+      <Panel title="Planned">
         <SourceList sources={planned} navigate={navigate} />
-      </Panel>
-      <Panel title="Agent access (MCP)" note="Planned">
-        <p className="muted">
-          An MCP endpoint at <code>/mcp</code> will let Claude and Codex read app health, issues and metrics and
-          acknowledge issues, signing in through Cloudflare Access managed OAuth. Unattended automations will use an
-          Access service token.
-        </p>
       </Panel>
     </>
   );

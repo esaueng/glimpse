@@ -429,7 +429,7 @@ export function Columns({
   items,
   tone = "accent",
   show = "value",
-  height = 120,
+  height = 88,
   empty = "No data in this range.",
 }: {
   items: { label: string; value: number; tone?: Tone }[];
