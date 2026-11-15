@@ -1,6 +1,6 @@
 # Esau Cloudflare usage and costs
 
-The Cloudflare page reads Esau infrastructure and billing independently of the
+The Costs page (formerly Cloudflare) reads Esau infrastructure and billing independently of the
 application analytics contract. Public and private apps share the protected page.
 Infrastructure metadata uses separate `cf_*` tables; app adapters and consent
 controls are unchanged.
@@ -79,7 +79,7 @@ only the last 40 days.
 The daily `31 3 * * *` analytics retention job writes a data-free "Analytics
 retention" row (status and time only) to the coverage table, so retention can be
 observed without reading analytics rows; the 48-hour staleness alert applies to
-it. The Cloudflare page shows this row under "Scheduled jobs" even before the
+it. The Costs page shows this row under "Scheduled jobs" even before the
 monitor is connected (it still needs migration `0004`). Cron strings live in `src/schedule.ts`, and a test ties them to
 `wrangler.jsonc`.
 

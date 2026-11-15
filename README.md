@@ -37,21 +37,28 @@ D1 database, service bindings, ingestion, or credentials. Its files stay under
 
 ## Inside the dashboard
 
-- **Overview:** utilization — opted-in cloud accounts, projects, and revisions
+- **Home:** a health card per app (status, requests, server-error and slow-request
+  shares, diagnostics) and a ranked "Needs attention" list with the evidence for
+  each item.
+- **Performance:** daily requests and error rate, API response-time ranges per
+  app, and slow operations.
+- **Usage:** utilization — opted-in cloud accounts, projects, and revisions
   with growth, an account-activity row (not collected yet), workspaces opened, per-app activity, top CAD operations, feature
   categories, simulation workflow steps, and model complexity.
 - **Issues:** server errors, diagnostic codes, failed exports, solves, and
-  generations, cloud request failures, slow operations, and a local JSON report
-  inspector with file and paste support.
+  generations, cloud request failures, and a local JSON report inspector with
+  file and paste support.
 - **Storage:** OpenZCAD cloud storage, growth, project sizes, and snapshot
   history; saved, upload, and download size observations.
 - **Privacy:** collection definitions, consent scopes, retention, and measurement
   limits alongside the numbers.
-- **Cloudflare:** Esau metered costs, subscriptions, app/resource usage, allocated
+- **Sources:** each connected data source with its latest data, and the
+  sources planned next.
+- **Costs:** Esau metered costs, subscriptions, app/resource usage, allocated
   cost estimates, budgets and collection coverage. See the
   [connection and rollout guide](docs/CLOUDFLARE.md); activation is separate.
 
-The dark, responsive interface includes UTC date ranges of up to 90 days,
+Navigation sits in a sidebar (a menu on narrow screens). The dark, responsive interface includes UTC date ranges of up to 90 days,
 URL-backed filters, accessible data tables, and manual refresh. Basic and opt-in
 figures load side by side and stay labelled by source. Empty, unsupported,
 unavailable, and stale results have distinct states. Candidate metrics that are
