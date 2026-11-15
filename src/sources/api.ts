@@ -20,7 +20,7 @@ export const HOOK_PREFIX = "/hooks/";
 const HOOK_LIMIT = 64 * 1024;
 
 /** Reads a bounded body; Content-Length alone is not trusted. */
-async function readBody(request: Request, limit: number): Promise<string | null> {
+export async function readBody(request: Request, limit: number): Promise<string | null> {
   const reader = request.body?.getReader();
   if (!reader) return "";
   const decoder = new TextDecoder();

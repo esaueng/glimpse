@@ -292,6 +292,21 @@ export async function setStatus(
   return true;
 }
 
+/** Adds or replaces the note without changing status; logged as activity. */
+export async function setNote(
+  db: D1Database,
+  id: string,
+  note: string,
+  actor: "dashboard" | "agent",
+  now = new Date(),
+): Promise<boolean> {
+  const at = now.toISOString();
+  const { meta } = await db.prepare("UPDATE issues SET note=?, updated_at=? WHERE id=?").bind(note, at, id).run();
+  if (!meta.changes) return false;
+  await activity(db, id, at, `note by ${actor}`, note);
+  return true;
+}
+
 /** Closed issues and old activity expire after 90 days; open and acknowledged issues stay. */
 export async function retainIssues(db: D1Database) {
   await db.batch([

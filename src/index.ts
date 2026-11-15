@@ -3,7 +3,6 @@ import {
   ACTIVITY_FIELDS,
   census,
   CENSUS_FIELDS,
-  publicCensus,
   thresholdActivity,
   type Census,
 } from "./expanded";
@@ -13,6 +12,8 @@ import { cloudflareApi } from "./cloudflare/api";
 import { logFailure } from "./errors";
 import { migrationPending, missingMigrations } from "./migrations";
 import { runScheduled } from "./schedule";
+import { readStats } from "./stats";
+import { MCP_PATH, mcp } from "./mcp";
 import { HOOK_PREFIX, hook, issuesApi } from "./sources/api";
 export async function record(
   env: Pick<Env, "DB">,
@@ -166,6 +167,15 @@ export default {
         );
       }
     }
+    // Agents: behind Access like the dashboard (managed OAuth or a service token).
+    if (url.pathname === MCP_PATH) {
+      try {
+        return protect(await mcp(request, env.DB));
+      } catch (error) {
+        logFailure("MCP request failed", error);
+        return protect(new Response("Unavailable", { status: 503 }));
+      }
+    }
     if (
       ["/api/issues", "/api/sources"].some(
         (p) => url.pathname === p || url.pathname.startsWith(`${p}/`),
@@ -204,37 +214,7 @@ export default {
           );
         const missing = await missingMigrations(env.DB, "stats");
         if (missing.length) return protect(migrationPending(missing));
-        const rows = await env.DB.prepare(
-          `SELECT day,app,level,event,bucket,count FROM daily_counts
-          WHERE day>=? AND day<=? AND day>=date('now','-89 days') AND level=? AND (?='all' OR app=?)
-          ORDER BY day,app,event,bucket`,
-        )
-          .bind(range.from, range.to, range.level, range.app, range.app)
-          .all();
-        // SELECT * follows the schema: without migration 0005 the activity columns are
-        // simply absent, and publicCensus also drops them for snapshots that never sent them.
-        const snapshots =
-          range.level === "optional"
-            ? await env.DB.prepare(
-                `SELECT * FROM daily_census WHERE day>=? AND day<=? AND day>=date('now','-89 days') AND (?='all' OR app=?) ORDER BY day DESC LIMIT 90`,
-              )
-                .bind(range.from, range.to, range.app, range.app)
-                .all<Record<string, unknown>>()
-            : { results: [] };
-        // Optional schema: reported, never blocking (src/migrations.ts).
-        const pendingMigrations =
-          range.level === "optional"
-            ? await missingMigrations(env.DB, "census_activity")
-            : [];
-        return protect(
-          Response.json({
-            range,
-            rows: rows.results,
-            census: snapshots.results.map(publicCensus),
-            ...(pendingMigrations.length ? { pendingMigrations } : {}),
-            receivedAt: new Date().toISOString(),
-          }),
-        );
+        return protect(Response.json(await readStats(env.DB, range)));
       }
       if (url.pathname.startsWith("/api/"))
         return protect(new Response("Not found", { status: 404 }));

@@ -62,7 +62,8 @@ Pages:
 - Sources: Webhooks first: Connect Workers Issues shows the URL and the secret
   once, with copy buttons and the setup steps. Rows show received and rejected
   counts, last delivery and status, unrecognised key paths, and actions to
-  rotate the secret or remove the source. Then connected sources (each app's analytics binding with its last data
+  rotate the secret or remove the source. "Agent access" shows the MCP URL with a
+  copy button. Then connected sources (each app's analytics binding with its last data
   day, OpenZCAD cloud snapshots, Cloudflare usage and billing with a link to
   Costs) and planned ones, each with its delivery method (push, pull, probe)
   and state. Planned sources are labelled Planned and never shown as data.

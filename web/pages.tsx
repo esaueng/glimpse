@@ -714,13 +714,6 @@ export function Sources({
       status: "",
     },
     {
-      name: "Agent access (MCP)",
-      kind: "MCP · Access OAuth",
-      detail: "Claude and Codex read health and issues",
-      state: "planned",
-      status: "",
-    },
-    {
       name: "Custom source",
       kind: "Signed webhook",
       detail: "Any service, own secret",
@@ -731,6 +724,16 @@ export function Sources({
   return (
     <>
       {issues && <Webhooks client={issues} demo={demo} />}
+      <Panel title="Agent access" note="MCP · Streamable HTTP">
+        <Copy
+          value={demo || typeof location === "undefined" ? "https://glimpse.esau.app/mcp" : `${location.origin}/mcp`}
+          label="MCP URL"
+        />
+        <p className="muted small">
+          For Claude and Codex: health, metrics and issues, plus issue status and notes. Sign in with Cloudflare
+          Access (managed OAuth) or an Access service token.
+        </p>
+      </Panel>
       <Panel title="Connected" note="Latest data in range">
         <SourceList sources={connected} navigate={navigate} />
       </Panel>
