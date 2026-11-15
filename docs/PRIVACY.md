@@ -259,7 +259,8 @@ review.
 
 **Source and path.** Cloudflare Workers Issues sends grouped Worker failures through a
 Cloudflare Notifications generic webhook to `/hooks/<source id>`. The path is outside
-Access (a path-scoped Access bypass), so each source has a random 32-byte secret, sent
+Access (a separate Access application, **Glimpse webhooks**, covering only `/hooks`,
+with an Everyone Bypass policy), so each source has a random 32-byte secret, sent
 by Cloudflare in `cf-webhook-auth`. Glimpse stores only its SHA-256 hash, compares in
 constant time, and gives the same 401 for an unknown source and a wrong secret. Bodies
 are capped at 64 KiB. Nothing reaches the aggregate analytics tables.

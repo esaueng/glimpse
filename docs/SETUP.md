@@ -81,17 +81,21 @@ sending the counts. Record the result in the [validation ledger](VALIDATION.md).
 `/api/issues`, `/api/sources` and `/hooks/*`, which return 503 until it is applied.
 Analytics and the Costs page are unaffected. Each step needs authorization:
 
-1. Apply the migration to Preview, then Production:
+1. Apply the migration to Preview, then Production (**done** in both):
 
    ```sh
    npx wrangler d1 migrations apply PREVIEW_DB --remote --config wrangler.preview-migrations.jsonc
    npx wrangler d1 migrations apply DB --remote
    ```
 
-2. In Zero Trust → Access → Applications → Glimpse, add a **Bypass** policy for the path
-   `glimpse.esau.app/hooks/`. Keep every other path behind the owner policy. Check that
-   `/` and `/api/issues` still require Access, and that `/hooks/x` returns 401 rather
-   than a login page.
+2. Put `/hooks` outside Access with its own application, as for the demo. **Done in
+   Production:** the self-hosted Access application **Glimpse webhooks** covers only
+   `glimpse.esau.app/hooks` (and its child paths), is hidden from the App Launcher, and has
+   one reusable Everyone **Bypass** policy, `Glimpse webhooks public access`. Access uses
+   the most specific matching path, so **Glimpse** keeps its owner-only Allow policy for
+   everything else. Never add the bypass to **Glimpse** itself: a policy there applies to
+   the whole hostname. Check that a `POST` to `/hooks/x` returns the Worker's 401 rather
+   than a login redirect, and that `/`, `/api/issues` and `/mcp` still redirect to Access.
 3. Open Glimpse → Sources → **Connect Workers Issues**. Copy the webhook URL and secret;
    the secret is shown once. Rotate it from the same row.
 4. For each Worker, open Cloudflare → Workers & Pages → the Worker → **Issues** →
