@@ -4,6 +4,7 @@ import {
   Suspense,
   useEffect,
   useRef,
+  useState,
   type ErrorInfo,
   type ReactNode,
 } from "react";
@@ -18,35 +19,67 @@ import {
   validScope,
   type Scope,
 } from "./ranges";
-import { Issues, Overview, Storage } from "./views";
+import { Issues, Storage, Usage } from "./views";
+import { Home, Performance, Sources } from "./pages";
 import type { MonitorLoader, SettingsWriter } from "./Cloudflare";
 import "./style.css";
 // The Cloudflare monitor is a separate page; load its code only when opened.
 const CloudflarePage = lazy(() =>
   import("./Cloudflare").then((m) => ({ default: m.CloudflarePage })),
 );
-const views = [
-  "Overview",
-  "Issues",
-  "Storage",
-  "Cloudflare",
-  "Privacy",
-] as const;
-type View = (typeof views)[number];
-// Earlier links used view=diagnostics; the collection level is now chosen per panel.
-const legacyViews: Record<string, View> = { diagnostics: "Issues" };
+type Page = { id: string; title: string; group: string; icon: string; data: boolean };
+// Grouped navigation. `data` pages load the analytics aggregates for the selected scope.
+const pages = [
+  { id: "home", title: "Home", group: "Monitor", icon: "M3 11 12 4l9 7M5 10v10h5v-6h4v6h5V10", data: true },
+  { id: "issues", title: "Issues", group: "Monitor", icon: "M12 3 2 20h20L12 3Zm0 6v5m0 3v.01", data: true },
+  { id: "performance", title: "Performance", group: "Monitor", icon: "M3 13a9 9 0 0 1 18 0M12 13l4-4M7 20h10", data: true },
+  { id: "usage", title: "Usage", group: "Product", icon: "M4 20V10m6 10V4m6 16v-7m4 7H2", data: true },
+  { id: "storage", title: "Storage", group: "Product", icon: "M4 6c0-1.7 3.6-3 8-3s8 1.3 8 3-3.6 3-8 3-8-1.3-8-3Zm0 0v12c0 1.7 3.6 3 8 3s8-1.3 8-3V6M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3", data: true },
+  { id: "costs", title: "Costs", group: "Infrastructure", icon: "M12 2v20M17 6H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6", data: false },
+  { id: "sources", title: "Sources", group: "Settings", icon: "M9 2v6m6-6v6M6 8h12v4a6 6 0 0 1-12 0V8Zm6 10v4", data: true },
+  { id: "privacy", title: "Privacy", group: "Settings", icon: "M12 3 4 6v6c0 5 3.5 8 8 9 4.5-1 8-4 8-9V6Z", data: false },
+] as const satisfies readonly Page[];
+type View = (typeof pages)[number]["id"];
+const groups = [...new Set(pages.map((p) => p.group))];
+// Earlier links named the pages Overview, Diagnostics and Cloudflare.
+const legacyViews: Record<string, View> = {
+  overview: "usage",
+  diagnostics: "issues",
+  cloudflare: "costs",
+};
 function readLocation(): { range: Scope; view: View; notice: string } {
   const view = new URLSearchParams(location.search).get("view") ?? "";
   const { scope, notice } = readScope(location.search);
   return {
     range: scope,
     notice,
-    view:
-      views.find((v) => v.toLowerCase() === view) ??
-      legacyViews[view] ??
-      "Overview",
+    view: pages.find((p) => p.id === view)?.id ?? legacyViews[view] ?? "home",
   };
 }
+const pageOf = (view: View) => pages.find((p) => p.id === view)!;
+const subtitles: Record<View, string> = {
+  home: "App health and what needs attention",
+  issues: "Server errors, diagnostics and failed operations",
+  performance: "Traffic, error rates and response times",
+  usage: "How the apps and cloud accounts are used",
+  storage: "Cloud storage, project sizes and transfers",
+  costs: "Cloudflare usage, billing and budgets",
+  sources: "Where Glimpse gets its data",
+  privacy: "What is collected and what never is",
+};
+function Icon({ d }: { d: string }) {
+  return (
+    <svg className="nav-icon" viewBox="0 0 24 24" aria-hidden="true">
+      <path d={d} />
+    </svg>
+  );
+}
+const appChoices = [
+  ["all", "All apps"],
+  ["openzcad", "OpenZCAD"],
+  ["openfea", "OpenFEA"],
+  ["openlattice3d", "OpenLattice3D"],
+] as const;
 /** Keeps a render error in one part of the page from blanking the dashboard. */
 export class ErrorBoundary extends Component<
   { children: ReactNode; resetKey?: string; compact?: boolean },
@@ -143,7 +176,7 @@ function Privacy() {
       </p>
       <h3>Cloudflare infrastructure monitoring</h3>
       <p>
-        The separate owner-authorized Cloudflare page stores infrastructure
+        The separate owner-authorized Costs page stores infrastructure
         resource names and IDs, app mappings, aggregate usage and costs for up
         to 400 days. It does not collect customer identities or model data.
         Public demo data is fictional.
@@ -164,19 +197,19 @@ export function Dashboard({
 }) {
   const [{ view, range: filter, notice }, setLocation] = useUrlState(
     readLocation,
-    // Normalise an invalid link in place, without adding a history entry.
+    // Normalise an invalid or legacy link in place, without adding a history entry.
     (next) => {
-      if (next.notice)
-        writeSearch(
-          scopeSearch(next.range, next.view.toLowerCase(), location.search),
-          "replace",
-        );
+      const raw = new URLSearchParams(location.search).get("view");
+      if (next.notice || (raw !== null && raw !== next.view))
+        writeSearch(scopeSearch(next.range, next.view, location.search), "replace");
     },
   );
+  const [menuOpen, setMenuOpen] = useState(false);
   const setNotice = (notice: string) =>
     setLocation((current) => ({ ...current, notice }));
   const { app, from, to } = filter;
-  const analyticsView = view !== "Cloudflare" && view !== "Privacy";
+  const page = pageOf(view),
+    analyticsView = page.data;
   // Basic and opt-in aggregates stay separate queries; each panel names its source.
   const { data, loading, error, refresh } = useLoader<Loaded>(
     (signal) =>
@@ -206,21 +239,34 @@ export function Dashboard({
       );
       return;
     }
+    setMenuOpen(false);
     setLocation({ range: { ...range }, view: nextView, notice: "" });
     writeSearch(
-      scopeSearch(range, nextView.toLowerCase(), location.search),
+      scopeSearch(range, nextView, location.search),
       nextView === view ? "replace" : "push",
     );
   }
+  const navigate = (next: string, nextApp?: string) => {
+    const target = pages.find((p) => p.id === next)?.id;
+    if (target) apply({ ...filter, app: nextApp ?? filter.app }, target);
+  };
   useEffect(() => {
-    document.title = `${view} · ${baseTitle.current}`;
+    document.title = `${page.title} · ${baseTitle.current}`;
     // Move focus to the new page heading on navigation, not on first load.
     if (shownView.current !== view) heading.current?.focus();
     shownView.current = view;
   }, [view]);
+  useEffect(() => {
+    if (!menuOpen) return;
+    const close = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setMenuOpen(false);
+    };
+    document.addEventListener("keydown", close);
+    return () => document.removeEventListener("keydown", close);
+  }, [menuOpen]);
   const applied = data?.basic.range ?? { ...filter, level: "basic" };
   return (
-    <>
+    <div className="shell">
       <a
         className="skip-link"
         href="#content"
@@ -231,51 +277,77 @@ export function Dashboard({
       >
         Skip to content
       </a>
-      <header className="topbar">
-        <div className="topbar-inner">
+      <aside className="sidebar">
+        <div className="sidebar-top">
           <a
             href="?"
             className="brand"
             onClick={(e) => {
               e.preventDefault();
-              apply(filter, "Overview");
+              apply(filter, "home");
             }}
           >
             <img
               className="brand-mark"
               src={`${import.meta.env.BASE_URL}brand/mark.svg`}
               alt=""
-              width="30"
-              height="30"
+              width="26"
+              height="26"
             />
             Glimpse
           </a>
-          <nav aria-label="Main navigation">
-            {views.map((v) => (
-              <button
-                key={v}
-                aria-current={view === v ? "page" : undefined}
-                onClick={() => apply(filter, v)}
-              >
-                {v}
-              </button>
-            ))}
-          </nav>
-          <div className="access-label">
+          <button
+            type="button"
+            className="menu-toggle"
+            aria-expanded={menuOpen}
+            aria-controls="main-nav"
+            onClick={() => setMenuOpen((open) => !open)}
+          >
             <svg viewBox="0 0 24 24" aria-hidden="true">
-              <path d="M12 3 4 6v6c0 5 3.5 8 8 9 4.5-1 8-4 8-9V6Z" />
+              <path d={menuOpen ? "M6 6l12 12M18 6 6 18" : "M4 7h16M4 12h16M4 17h16"} />
             </svg>
-            <span className="access-long">
-              {demo
-                ? "Public demo · sample data"
-                : "Only you · Cloudflare Access"}
-            </span>
-            <span className="access-short">
-              {demo ? "Sample data" : "Only you"}
-            </span>
-          </div>
+            <span className="sr-only">Menu</span>
+            <span aria-hidden="true">{page.title}</span>
+          </button>
         </div>
-      </header>
+        <nav
+          id="main-nav"
+          aria-label="Main navigation"
+          className={menuOpen ? "is-open" : undefined}
+        >
+          {groups.map((group) => (
+            <div className="nav-group" key={group}>
+              <span className="nav-group-title" aria-hidden="true">
+                {group}
+              </span>
+              <ul aria-label={group}>
+                {pages
+                  .filter((p) => p.group === group)
+                  .map((p) => (
+                    <li key={p.id}>
+                      <button
+                        type="button"
+                        aria-current={view === p.id ? "page" : undefined}
+                        onClick={() => apply(filter, p.id)}
+                      >
+                        <Icon d={p.icon} />
+                        {p.title}
+                      </button>
+                    </li>
+                  ))}
+              </ul>
+            </div>
+          ))}
+        </nav>
+        <div className="access-label">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M12 3 4 6v6c0 5 3.5 8 8 9 4.5-1 8-4 8-9V6Z" />
+          </svg>
+          <span>
+            {demo ? "Public demo · sample data" : "Only you · Cloudflare Access"}
+          </span>
+        </div>
+      </aside>
       <main id="content" tabIndex={-1}>
         {demo && (
           <aside className="demo-banner" aria-label="Demo information">
@@ -297,66 +369,72 @@ export function Dashboard({
             </a>
           </aside>
         )}
-        <div className="toolbar">
-          <h1 ref={heading} tabIndex={-1}>
-            {view}
-          </h1>
+        <div className="page-head">
+          <div className="page-title">
+            <h1 ref={heading} tabIndex={-1}>
+              {page.title}
+            </h1>
+            <p className="muted">{subtitles[view]}</p>
+          </div>
           {analyticsView && (
-            <div className="controls">
-              <RangePicker
-                value={filter}
-                onChange={(t) => apply({ app: filter.app, ...t })}
-              />
-              <label className="app-select">
-                <span className="sr-only">App</span>
-                <select
-                  value={filter.app}
-                  onChange={(e) => apply({ ...filter, app: e.target.value })}
-                >
-                  <option value="all">All apps</option>
-                  <option value="openzcad">OpenZCAD</option>
-                  <option value="openfea">OpenFEA</option>
-                  <option value="openlattice3d">OpenLattice3D</option>
-                </select>
-              </label>
-              <div className="refresh">
-                <span className="status" role="status" aria-live="polite">
-                  {loading
-                    ? "Loading…"
-                    : error
-                      ? "Refresh failed"
-                      : data
-                        ? `${demo ? "Synthetic · " : ""}Updated ${utcTime(data.basic.receivedAt)} UTC`
-                        : "Awaiting data"}
-                </span>
-                <button
-                  type="button"
-                  aria-label="Refresh"
-                  title="Refresh"
-                  // aria-disabled keeps focus on the button while loading.
-                  aria-disabled={loading}
-                  className={loading ? "is-spinning" : undefined}
-                  onClick={() => {
-                    if (loading) return;
-                    setLocation((current) => ({
-                      ...current,
-                      range: {
-                        ...current.range,
-                        ...refreshedTimeframe(current.range),
-                      },
-                    }));
-                    refresh();
-                  }}
-                >
-                  <svg viewBox="0 0 24 24" aria-hidden="true">
-                    <path d="M21 12a9 9 0 1 1-3-6.7L21 8" />
-                    <path d="M21 3v5h-5" />
-                  </svg>
-                </button>
-              </div>
+            <div className="refresh">
+              <span className="status" role="status" aria-live="polite">
+                {loading
+                  ? "Loading…"
+                  : error
+                    ? "Refresh failed"
+                    : data
+                      ? `${demo ? "Synthetic · " : ""}Updated ${utcTime(data.basic.receivedAt)} UTC`
+                      : "Awaiting data"}
+              </span>
+              <button
+                type="button"
+                aria-label="Refresh"
+                title="Refresh"
+                // aria-disabled keeps focus on the button while loading.
+                aria-disabled={loading}
+                className={loading ? "is-spinning" : undefined}
+                onClick={() => {
+                  if (loading) return;
+                  setLocation((current) => ({
+                    ...current,
+                    range: {
+                      ...current.range,
+                      ...refreshedTimeframe(current.range),
+                    },
+                  }));
+                  refresh();
+                }}
+              >
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M21 12a9 9 0 1 1-3-6.7L21 8" />
+                  <path d="M21 3v5h-5" />
+                </svg>
+              </button>
             </div>
           )}
         </div>
+        {analyticsView && (
+          <div className="controls">
+            <RangePicker
+              value={filter}
+              onChange={(t) => apply({ app: filter.app, ...t })}
+            />
+            <div className="app-filter" role="group" aria-label="App">
+              {appChoices.map(([id, name]) => (
+                <button
+                  key={id}
+                  type="button"
+                  aria-pressed={filter.app === id}
+                  onClick={() => apply({ ...filter, app: id })}
+                >
+                  {id !== "all" && <span className={`swatch ${id}`} aria-hidden="true" />}
+                  {name}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
         {notice && (
           <div className="range-notice" role="status" data-range-notice>
             <p>{notice}</p>
@@ -384,7 +462,7 @@ export function Dashboard({
           </p>
         )}
         <ErrorBoundary compact resetKey={`${view}:${app}:${from}:${to}`}>
-          {view === "Cloudflare" ? (
+          {view === "costs" ? (
             <Suspense
               fallback={<p className="notice">Loading Cloudflare monitor…</p>}
             >
@@ -394,22 +472,27 @@ export function Dashboard({
                 demo={demo}
               />
             </Suspense>
-          ) : view === "Privacy" ? (
+          ) : view === "privacy" ? (
             <Privacy />
           ) : data ? (
             <div
               className={loading ? "content is-loading" : "content"}
               aria-busy={loading}
             >
-              {view === "Overview" && (
-                <Overview data={data} app={applied.app} />
+              {view === "home" && (
+                <Home data={data} app={applied.app} navigate={navigate} />
               )}
-              {view === "Issues" && (
+              {view === "issues" && (
                 <Issues data={data} app={applied.app} demo={demo} />
               )}
-              {view === "Storage" && (
+              {view === "performance" && (
+                <Performance data={data} app={applied.app} />
+              )}
+              {view === "usage" && <Usage data={data} app={applied.app} />}
+              {view === "storage" && (
                 <Storage data={data} app={applied.app} />
               )}
+              {view === "sources" && <Sources data={data} navigate={navigate} />}
             </div>
           ) : (
             !loading && <p className="notice">No data loaded.</p>
@@ -423,6 +506,6 @@ export function Dashboard({
           </span>
         </footer>
       </main>
-    </>
+    </div>
   );
 }

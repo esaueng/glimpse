@@ -7,7 +7,8 @@ import { describe, expect, it } from "vitest";
 import { LineChart, shortDay } from "../web/charts";
 import { Panel, Tile } from "../web/ui";
 import { CoverageTable } from "../web/cloudflare/tables";
-import { AccountActivity, Issues, Overview, Storage } from "../web/views";
+import { AccountActivity, Issues, SlowOperations, Storage, Usage } from "../web/views";
+import { Home, Performance, Sources } from "../web/pages";
 import { demoStats } from "../web/demo-data";
 import { RETENTION_SOURCE } from "../src/cloudflare/model";
 
@@ -232,7 +233,7 @@ describe("OpenLattice3D panels", () => {
     ].map((m) => `${m[1]}: ${m[2]}`);
 
   it("shows feature categories and lattice cell counts for OpenLattice3D", () => {
-    const out = html(<Overview data={load("openlattice3d")} app="openlattice3d" />);
+    const out = html(<Usage data={load("openlattice3d")} app="openlattice3d" />);
     expect(naPanels(out)).toEqual(["Cloud growth", "Top CAD operations", "Simulation workflow"]);
     expect(naRows(out)).toEqual(["Parts per saved model: OpenZCAD and OpenFEA only"]);
     expect(out).toContain("Unit cells per generated lattice");
@@ -241,24 +242,33 @@ describe("OpenLattice3D panels", () => {
   });
   it("shows the lattice cell count as an N/A row for the other apps", () => {
     for (const app of ["openzcad", "openfea"]) {
-      const out = html(<Overview data={load(app)} app={app} />);
+      const out = html(<Usage data={load(app)} app={app} />);
       expect(naRows(out)).toEqual(["Unit cells per generated lattice: OpenLattice3D only"]);
       expect(out).not.toContain("not sent by");
     }
-    const all = html(<Overview data={load("all")} app="all" />);
+    const all = html(<Usage data={load("all")} app="all" />);
     expect(naRows(all)).toEqual([]);
     expect(all).toContain("Unit cells per generated lattice");
     expect(all).toContain("Parts per saved model");
   });
-  it("lists OpenLattice3D diagnostics and export timing on Issues, not cloud or solver rows", () => {
+  it("lists OpenLattice3D diagnostics on Issues, not cloud or solver rows", () => {
     const out = html(<Issues data={load("openlattice3d")} app="openlattice3d" demo />);
     expect(naPanels(out)).toEqual(["Cloud request failures"]);
     expect(out).toMatch(/OpenLattice3D \d/);
     expect(out).toContain("Out of memory");
     expect(out).not.toContain(">Mesh<");
+    // Timing moved to Performance.
+    expect(out).not.toContain("Slow operations");
+  });
+  it("shows OpenLattice3D export timing on Performance, not cloud or solver rows", () => {
+    const out = html(<SlowOperations data={load("openlattice3d")} app="openlattice3d" />);
     expect(out).toContain("<span>Exports</span>");
     for (const row of ["Cloud saves", "Meshing · OpenFEA", "Solving · OpenFEA"])
       expect(out).not.toContain(`<span>${row}</span>`);
+    const page = html(<Performance data={load("openlattice3d")} app="openlattice3d" />);
+    expect(page).toContain("Slow operations");
+    expect(page).toContain("API response time by app");
+    expect(page).not.toContain(">OpenZCAD<");
   });
   it("shows OpenLattice3D saved project sizes on Storage, with transfers N/A", () => {
     const out = html(<Storage data={load("openlattice3d")} app="openlattice3d" />);
@@ -268,5 +278,30 @@ describe("OpenLattice3D panels", () => {
     ]);
     expect(out).toContain("<span>Saved projects</span>");
     expect(out).not.toContain("<span>Uploads</span>");
+  });
+});
+
+describe("Monitoring pages", () => {
+  const now = new Date("2026-11-15T12:00:00Z");
+  const load = (app: string) => ({
+    basic: demoStats({ app, from: "2026-11-01", to: "2026-11-14", level: "basic" }, now),
+    optional: demoStats({ app, from: "2026-11-01", to: "2026-11-14", level: "optional" }, now),
+  });
+  it("shows one health card per app in scope on Home", () => {
+    const all = html(<Home data={load("all")} app="all" navigate={() => {}} />);
+    expect(all.match(/class="health-card /g)).toHaveLength(3);
+    expect(all).toContain("Needs attention");
+    const one = html(<Home data={load("openfea")} app="openfea" navigate={() => {}} />);
+    expect(one.match(/class="health-card /g)).toHaveLength(1);
+    expect(one).toContain("OpenFEA");
+    // Cloud totals belong to OpenZCAD.
+    expect(one).toMatch(/Cloud accounts<\/dt><dd>N\/A/);
+  });
+  it("lists connected sources with their latest data and planned ones as planned", () => {
+    const out = html(<Sources data={load("all")} navigate={() => {}} />);
+    expect(out).toContain("OpenZCAD analytics");
+    expect(out).toContain("last data");
+    expect(out).toContain("Cloudflare Workers Issues");
+    expect(out.match(/source-state planned/g)!.length).toBeGreaterThanOrEqual(5);
   });
 });

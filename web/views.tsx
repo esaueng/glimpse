@@ -144,7 +144,7 @@ export function AccountActivity({ row, pending = false }: { row: CensusRow; pend
   );
 }
 
-export function Overview({ data, app }: { data: Loaded; app: string }) {
+export function Usage({ data, app }: { data: Loaded; app: string }) {
   const rows = data.optional.rows,
     basic = data.basic.rows,
     history = censusHistory(data.optional.census),
@@ -545,18 +545,6 @@ export function Issues({
   const serverDaily = dailyTotals(data.basic, "api_error"),
     codeDaily = dailyTotals(data.optional, isErrorCode);
   const maxCode = Math.max(1, ...codes.map((c) => c.count));
-  const timings = latencyRows
-    .filter(([, , , only]) => !only || !notApplicable(app, only))
-    .map(([name, level, event]) => {
-      const values = bucketCounts(level === "basic" ? basic : rows, event, level === "basic" ? BUCKETS : TIMINGS);
-      return {
-        name,
-        event,
-        values,
-        sum: values.reduce((n, v) => n + v, 0),
-        slow: (values[3] ?? 0) + (values[4] ?? 0),
-      };
-    });
   return (
     <>
       <section className="strip" aria-label="Issue summary">
@@ -702,6 +690,34 @@ export function Issues({
         </Panel>
       </div>
 
+      <ReportInspector demo={demo} app={app} />
+
+      <details className="panel more-panel">
+        <summary>All opt-in event buckets</summary>
+        <EventTable rows={rows} />
+      </details>
+    </>
+  );
+}
+
+/** Coarse timing ranges per operation, with the share at 10 s or more. */
+export function SlowOperations({ data, app }: { data: Loaded; app: string }) {
+  const rows = data.optional.rows,
+    basic = data.basic.rows;
+  const timings = latencyRows
+    .filter(([, , , only]) => !only || !notApplicable(app, only))
+    .map(([name, level, event]) => {
+      const values = bucketCounts(level === "basic" ? basic : rows, event, level === "basic" ? BUCKETS : TIMINGS);
+      return {
+        name,
+        event,
+        values,
+        sum: values.reduce((n, v) => n + v, 0),
+        slow: (values[3] ?? 0) + (values[4] ?? 0),
+      };
+    });
+  return (
+    <>
       <Panel
         title="Slow operations"
         note={
@@ -761,12 +777,6 @@ export function Issues({
         </p>
       </Panel>
 
-      <ReportInspector demo={demo} app={app} />
-
-      <details className="panel more-panel">
-        <summary>All opt-in event buckets</summary>
-        <EventTable rows={rows} />
-      </details>
     </>
   );
 }
