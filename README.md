@@ -57,6 +57,9 @@ D1 database, service bindings, ingestion, or credentials. Its files stay under
 - **Sources:** webhooks (connect Workers Issues, rotate secrets, see last
   delivery), each connected data source with its latest data, and the sources
   planned next.
+- **Agents (MCP):** `/mcp` lets Claude and Codex read health, metrics and
+  issues and set issue status and notes, signing in through Cloudflare Access.
+  See [agent access](docs/MCP.md).
 - **Costs:** Esau metered costs, subscriptions, app/resource usage, allocated
   cost estimates, budgets and collection coverage. See the
   [connection and rollout guide](docs/CLOUDFLARE.md); activation is separate.

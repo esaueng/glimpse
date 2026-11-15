@@ -288,3 +288,12 @@ data, and treat titles as possibly personal. **Retention:** open and acknowledge
 issues stay until closed. Resolved and ignored issues, and activity, are deleted 90
 days after they were last seen, by the daily `31 3 * * *` job. **Access:** dashboard
 reads and writes require Access; changes must be same-origin JSON.
+
+### Agent access (MCP)
+
+`/mcp` exposes the same data as the dashboard to MCP clients behind the same Access
+policy: aggregates, scrubbed issue metadata, and source delivery status without secrets.
+It can change an issue's status or note. The activity log records the role "agent",
+never a client or person. It adds no storage. Text that agents read may be sent to the
+model provider that runs the agent, so the scrubbing rules above also limit what
+leaves Glimpse that way.
