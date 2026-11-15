@@ -168,7 +168,9 @@ export async function ingest(db: D1Database, source: string, event: IssueEvent, 
       `UPDATE issues SET
         prev_status=status,
         status=${next},
-        status_at=CASE WHEN ${next} <> status THEN ?4 ELSE status_at END,
+        -- A source-driven change takes effect at the event's time, so a delayed end event
+        -- cannot hide an occurrence that happened after it.
+        status_at=CASE WHEN ${next} <> status THEN ?2 ELSE status_at END,
         occurrences=CASE WHEN ?3 IS NULL THEN occurrences + (CASE WHEN ?1 = 1 THEN 0 ELSE 1 END) ELSE MAX(occurrences, ?3) END,
         last_seen=CASE WHEN ?1 = 0 AND ?2 > last_seen THEN ?2 ELSE last_seen END,
         app=COALESCE(?5,app), service=COALESCE(?6,service), category=?7, severity=?8, title=?9, detail=?10,

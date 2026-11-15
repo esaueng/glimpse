@@ -22,6 +22,7 @@ describe("scrub", () => {
     expect(scrub("TypeError: x at index.ts:22:5 at 12:30:45 in Foo::bar, a : b")).toBe(
       "TypeError: x at index.ts:22:5 at 12:30:45 in Foo::bar, a : b",
     );
+    expect(scrub("at abc::def (file.cpp:12)")).toBe("at abc::def (file.cpp:12)");
     expect(scrub("word ".repeat(100), 20)).toHaveLength(20);
     expect(scrub("  ")).toBeNull();
     expect(scrub({})).toBeNull();
@@ -276,9 +277,30 @@ describe("webhook and inbox service", () => {
     // A newer occurrence does.
     await deliver(source, secret, crash(at(0) + 1));
     expect(await status()).toBe("open");
-    // A current end event resolves it.
+    // A current end event resolves it, effective at the event's time: an occurrence after
+    // that time reopens it even when the end event was delivered late.
+    await deliver(source, secret, crash(at(0) - 120, { alert_event: "ALERT_STATE_EVENT_END" }));
+    expect(await status()).toBe("open");
     await deliver(source, secret, crash(at(0) + 2, { alert_event: "ALERT_STATE_EVENT_END" }));
     expect(await status()).toBe("resolved");
+
+    // A late-delivered end event (stamped 5 min ago) must not hide an occurrence after it.
+    const late = (ts: number, extra: Record<string, unknown> = {}) => ({
+      text: "Late crash",
+      ts,
+      data: { issue: { id: "order-2", script_name: "openzcad" } },
+      ...extra,
+    });
+    await deliver(source, secret, late(at(600)));
+    const second = ((await (await api("/api/issues?app=openzcad&category=error")).json()) as {
+      issues: { id: string; title: string }[];
+    }).issues.find((i) => i.title === "Late crash")!;
+    const secondStatus = async () =>
+      ((await (await api(`/api/issues/${second.id}`)).json()) as { status: string }).status;
+    await deliver(source, secret, late(at(300), { alert_event: "ALERT_STATE_EVENT_END" }));
+    expect(await secondStatus()).toBe("resolved");
+    await deliver(source, secret, late(at(200)));
+    expect(await secondStatus()).toBe("open");
   });
 
   it("validates writes and filters", async () => {

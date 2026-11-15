@@ -2,7 +2,7 @@
 // Privacy choice B: keep what explains a failure, drop what identifies a person or request:
 // no IPs, emails, tokens, query strings, request bodies or long identifiers.
 
-const RULES: [RegExp, string][] = [
+const RULES: [RegExp, string | ((match: string) => string)][] = [
   // JWTs and bearer-style tokens before anything that might split them.
   [/\beyJ[\w-]{8,}\.[\w-]{8,}\.[\w-]{8,}/g, "[token]"],
   [/\b(?:bearer|token|key|secret|password|pwd|auth)[=: ]+\S+/gi, "[secret]"],
@@ -12,7 +12,11 @@ const RULES: [RegExp, string][] = [
   [/\b\d{1,3}(?:\.\d{1,3}){3}(?::\d+)?\b/g, "[ip]"],
   [/\b(?:[0-9a-f]{1,4}:){3,7}[0-9a-f]{1,4}\b/gi, "[ip]"],
   // Compressed IPv6 ("2001:db8::1", "fe80::1%eth0", "::1", "::ffff:...").
-  [/(?:\b(?:[0-9a-f]{1,4}:){1,7}:|(?<![\w:])::)(?:[0-9a-f]{1,4}(?::[0-9a-f]{1,4}){0,6})?(?:%[\w.]+)?(?![\w:])/gi, "[ip]"],
+  // A digit is required, so hex-only C++ scopes such as abc::def survive.
+  [
+    /(?:\b(?:[0-9a-f]{1,4}:){1,7}:|(?<![\w:])::)(?:[0-9a-f]{1,4}(?::[0-9a-f]{1,4}){0,6})?(?:%[\w.]+)?(?![\w:])/gi,
+    (match) => (/\d/.test(match) ? "[ip]" : match),
+  ],
   [/\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/gi, "[id]"],
   [/\b[0-9a-f]{16,}\b/gi, "[id]"],
   [/\b[A-Za-z0-9_-]{32,}\b/g, "[id]"],
@@ -23,7 +27,8 @@ const RULES: [RegExp, string][] = [
 export function scrub(value: unknown, max = 200): string | null {
   if (typeof value !== "string" && typeof value !== "number") return null;
   let text = String(value).replace(/[\u0000-\u001f\u007f]+/g, " ");
-  for (const [pattern, replacement] of RULES) text = text.replace(pattern, replacement);
+  for (const [pattern, replacement] of RULES)
+    text = typeof replacement === "string" ? text.replace(pattern, replacement) : text.replace(pattern, replacement);
   text = text.replace(/\s+/g, " ").trim();
   if (!text) return null;
   return text.length > max ? `${text.slice(0, max - 1)}…` : text;
