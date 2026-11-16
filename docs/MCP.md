@@ -36,17 +36,23 @@ Observability read access.
 
 Each step below needs owner authorization in Zero Trust.
 
-**People: Access managed OAuth.** Open Zero Trust → Access → Applications → Glimpse →
-Advanced settings and turn on **Managed OAuth**. An MCP client then gets a 401 that
+**People: Access managed OAuth.** **Done in Production:** the Glimpse Access application
+has **Managed OAuth** on (Zero Trust → Access → Applications → Glimpse → Advanced
+settings), with Cloudflare's default dynamic client registration for localhost and
+loopback redirects. An MCP client then gets a 401 that
 points at Access's OAuth metadata. It opens the browser for the normal Access login and
 receives a token, and Access forwards the request with the same JWT the dashboard uses.
 This changes the unauthenticated response for non-browser clients on the whole
 hostname from a login redirect to a 401. The `/hooks/` bypass is unaffected.
 
 ```sh
-# Claude Code
+# Claude Code; add -s user to use it from any directory
 claude mcp add --transport http glimpse https://glimpse.esau.app/mcp
 ```
+
+`claude mcp get glimpse` then shows "Needs authentication". In an interactive Claude
+Code session, run `/mcp`, choose **glimpse**, then **Authenticate**, and sign in with
+Access in the browser.
 
 For Codex, add an HTTP MCP server with that URL in `~/.codex/config.toml` and sign in
 when prompted. The exact keys depend on the Codex version; check `codex mcp --help`.
