@@ -34,6 +34,49 @@ describe("scrub", () => {
       ),
     ).toEqual(["handler (users.ts:12:5)", "worker.js:40:1"]);
   });
+  it("redacts complete quoted credential fields while preserving diagnostics", () => {
+    const value = "example-value";
+    for (const key of ["bearer", "token", "key", "secret", "password", "pwd", "auth", "Authorization", "api_key", "accessToken", "client-secret", "newPassword", "user_password", "passwd", "private_key", "x-api-key"]) {
+      for (const quote of ['"', "'"])
+        expect(scrub(`Failed: {${quote}${key}${quote}: ${quote}${value} with spaces${quote}, "code":"bad-input"} retry`))
+          .toBe('Failed: {[secret], "code":"bad-input"} retry');
+    }
+    expect(scrub(`Failed: ${JSON.stringify({ password: `${value} with "quotes" and \\slashes`, code: "bad-input" })} retry`))
+      .toBe('Failed: {[secret],"code":"bad-input"} retry');
+    expect(scrub(`Failed: {'password': '${value} with \\'quotes\\' and \\\\slashes'} retry`))
+      .toBe("Failed: {[secret]} retry");
+    expect(scrub(`Failed: {"pass\\u0077ord":"${value}"} retry`)).toBe("Failed: {[secret]} retry");
+    expect(scrub('Failed: {"pass\\u0077ord":"example \\"quoted\\" value"} retry')).toBe("Failed: {[secret]} retry");
+    expect(scrub('Failed: {"Password\\u0000":"example value"} retry')).toBe("Failed: {[secret]} retry");
+    expect(scrub(`Failed: password="${value} with spaces" retry`)).toBe("Failed: [secret] retry");
+    expect(scrub(`Failed: {"password":"${value}","token":"other-value"} retry`)).toBe("Failed: {[secret],[secret]} retry");
+    expect(scrub(`Failed: {"password": "${value} unfinished`)).toBe("Failed: {[secret]");
+    expect(scrub(`Failed: {"password": "${value} unfinished\\`)).toBe("Failed: {[secret]");
+    expect(scrub('TypeError: {"code":"bad-input","message":"cannot load"} at main.ts:4:2'))
+      .toBe('TypeError: {"code":"bad-input","message":"cannot load"} at main.ts:4:2');
+    expect(scrub('Unexpected token " in JSON at position 0 at main.ts:4:2'))
+      .toBe("Unexpected [secret] in JSON at position 0 at main.ts:4:2");
+    expect(scrub("Authorization: Basic example-value")).toBe("Authorization: [secret]");
+  });
+  it("withholds structured and repeatedly serialized credential values", () => {
+    for (const value of [["example-first", "example second"], { value: "example first", nested: ["example second"] }]) {
+      const json = JSON.stringify({ password: value, code: "bad-input" });
+      expect(scrub(`Failed: ${json} retry`)).toBe('Failed: {[secret],"code":"bad-input"} retry');
+    }
+    let json = JSON.stringify({ password: 'example first "quoted" \\ path', code: "bad-input" });
+    for (let depth = 0; depth < 4; depth++) {
+      const result = scrub(`Failed: ${json} retry`);
+      expect(result).toContain("[secret]");
+      expect(result).not.toContain("example");
+      expect(result).not.toContain("quoted");
+      json = JSON.stringify(json);
+    }
+    expect(scrub('body={\\"password\\":\\"example first\\"} retry')).toBe("body={[secret]} retry");
+    expect(scrub("Failed: {'pass\\u0077ord':'example value'} retry")).toBe("Failed: {[secret]} retry");
+    expect(scrub('Failed: {"password":{"nested":["example value"]}')).toBe("Failed: {[secret]");
+    expect(scrub('Failed: {"password":["example value"} trailing')).toBe("Failed: {[secret]");
+    expect(scrub('Path C:\\work\\file.js and \\"quoted\\" prose')).toBe('Path C:\\work\\file.js and \\"quoted\\" prose');
+  });
   it("describes a payload by key paths only", () => {
     expect(shape({ data: { issue: { id: "secret-value", tags: ["a"] } }, ts: 1 })).toEqual([
       "data",
@@ -247,6 +290,57 @@ describe("webhook and inbox service", () => {
     const body = await (await api("/api/issues?app=openlattice3d")).text();
     expect(body).toContain("Crash");
     expect(body).not.toContain("alice");
+  });
+
+  it("redacts webhook credentials before insert and update, dashboard reads and MCP reads", async () => {
+    const { id: source, secret } = (await (
+      await api("/api/sources", { method: "POST", body: JSON.stringify({ kind: "cloudflare-issues", name: "Redaction regression" }) })
+    ).json()) as Record<string, string>;
+    const db = await mf.getD1Database("DB", "glimpse");
+    for (const [value, credentials, redacted] of [
+      ["first-example", JSON.stringify({ password: "first-example with spaces" }), "{[secret]}"],
+      ["updated-example", JSON.stringify({ password: ["updated-example", "updated-example with spaces"] }), "{[secret]}"],
+      ["encoded-example", JSON.stringify(JSON.stringify({ password: 'encoded-example with "quotes"' })), '"{[secret]}"'],
+    ]) {
+      expect((await deliver(source, secret, {
+        data: { issue: {
+          id: "redaction-regression",
+          title: `Failure ${credentials}`,
+          script_name: `openfea ${credentials}`,
+          error_type: `TypeError ${credentials}`,
+          stack: `Error\n    at handler ${credentials} (src/main.ts:4:2)`,
+        }, trigger: `delivery ${credentials}` },
+      })).status).toBe(202);
+      const stored = await db.prepare("SELECT * FROM issues WHERE source=?").bind(source).first<{ id: string; title: string; detail: string }>();
+      expect(stored).not.toBeNull();
+      expect(stored!.title).toBe(`Failure ${redacted}`);
+      expect(JSON.parse(stored!.detail)).toEqual({
+        errorType: `TypeError ${redacted}`,
+        frames: [`handler ${redacted} (main.ts:4:2)`],
+        trigger: `delivery ${redacted}`,
+      });
+      expect(JSON.stringify(stored)).not.toContain(value);
+      for (const path of ["/api/issues", `/api/issues/${stored!.id}`]) {
+        const response = await api(path);
+        expect(response.status).toBe(200);
+        const body = await response.text();
+        const data = JSON.parse(body) as { issues?: { id: string; title: string }[]; title?: string };
+        expect(data.issues ? data.issues.find((issue) => issue.id === stored!.id)?.title : data.title).toBe(`Failure ${redacted}`);
+        expect(body).not.toContain(value);
+      }
+      for (const [name, args] of [["list_issues", {}], ["get_issue", { id: stored!.id }]] as const) {
+        const response = await api("/mcp", {
+          method: "POST",
+          body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name, arguments: args } }),
+        });
+        expect(response.status).toBe(200);
+        const body = await response.json() as { result: { content: { text: string }[]; isError?: boolean } };
+        expect(body.result.isError).not.toBe(true);
+        const data = JSON.parse(body.result.content[0]!.text) as { issues?: { id: string; title: string }[]; title?: string };
+        expect(data.issues ? data.issues.find((issue) => issue.id === stored!.id)?.title : data.title).toBe(`Failure ${redacted}`);
+        expect(JSON.stringify(body)).not.toContain(value);
+      }
+    }
   });
 
   it("ignores replays and stale end events when choosing a status", async () => {
