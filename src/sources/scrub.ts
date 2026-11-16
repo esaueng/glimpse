@@ -35,7 +35,8 @@ function valueEnd(text: string, start: number): number {
 }
 
 function assignments(text: string): string {
-  const fields = /"((?:\\.|[^"\\])*)"\s*[:=]\s*|'((?:\\.|[^'\\])*)'\s*[:=]\s*|\b([a-z][\w-]*)\s*[:=]\s*/gi;
+  // Escaped delimiters belong to a later decoding pass, not new quoted keys.
+  const fields = /(?<!\\)"((?:\\.|[^"\\])*)"\s*[:=]\s*|(?<!\\)'((?:\\.|[^'\\])*)'\s*[:=]\s*|\b([a-z][\w-]*)\s*[:=]\s*/gi;
   let result = "", copied = 0;
   for (let match; (match = fields.exec(text));) {
     // Decode field names independently, so escaped value delimiters stay intact.
@@ -44,6 +45,9 @@ function assignments(text: string): string {
         (_, hex: string | undefined, char: string | undefined) => hex ? String.fromCharCode(parseInt(hex, 16)) : char!)
       .replace(/[_\-\u0000-\u0020\u007f]/g, "");
     if (!CREDENTIAL_NAME.test(name)) continue;
+    // Leave an encoded opening delimiter intact until the decoding pass exposes
+    // its whole quoted value. Consuming it as a scalar would leak later words.
+    if (/^\\(?:["'\\]|u[0-9a-f]{4})/i.test(text.slice(fields.lastIndex))) continue;
     // Preserve the established Authorization header label while removing its scheme
     // and complete credential, rather than treating Bearer/Basic as the value alone.
     const header = match[3] !== undefined && name.toLowerCase() === "authorization"
@@ -75,7 +79,7 @@ const RULES: [RegExp, string | ((match: string) => string)][] = [
   [/\beyJ[\w-]{8,}\.[\w-]{8,}\.[\w-]{8,}/g, "[token]"],
   // Legacy whitespace/Bearer forms: an unmatched quote in prose (Unexpected token ")
   // must not consume the rest of the diagnostic. Explicit assignments are handled above.
-  [/\b(?:bearer|token|key|secret|password|pwd|auth)[=: ]+(?:"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|\S+)/gi, "[secret]"],
+  [/\b(?:bearer|token|key|secret|password|pwd|auth)[=: ]+\S+/gi, "[secret]"],
   [/[\w.+-]+@[\w-]+(?:\.[\w-]+)+/g, "[email]"],
   // Query strings and fragments on URLs and paths.
   [/([/\w.-])[?#][^\s"'`)<>]*/g, "$1"],

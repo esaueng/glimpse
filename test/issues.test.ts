@@ -56,6 +56,8 @@ describe("scrub", () => {
       .toBe('TypeError: {"code":"bad-input","message":"cannot load"} at main.ts:4:2');
     expect(scrub('Unexpected token " in JSON at position 0 at main.ts:4:2'))
       .toBe("Unexpected [secret] in JSON at position 0 at main.ts:4:2");
+    expect(scrub('Unexpected token " in JSON at position 0, file "a.json" line 3'))
+      .toBe('Unexpected [secret] in JSON at position 0, file "a.json" line 3');
     expect(scrub("Authorization: Basic example-value")).toBe("Authorization: [secret]");
   });
   it("withholds structured and repeatedly serialized credential values", () => {
@@ -72,10 +74,26 @@ describe("scrub", () => {
       json = JSON.stringify(json);
     }
     expect(scrub('body={\\"password\\":\\"example first\\"} retry')).toBe("body={[secret]} retry");
+    for (const quote of ['"', "'"]) {
+      let assignment = `password=${quote}example first${quote} tail`;
+      for (let depth = 0; depth < 4; depth++) {
+        expect(scrub(assignment)).toContain("[secret]");
+        expect(scrub(assignment)).not.toContain("first");
+        assignment = JSON.stringify(assignment);
+      }
+      expect(scrub(`x password=\\${quote}example first\\${quote} tail`)).toBe("x [secret] tail");
+    }
     expect(scrub("Failed: {'pass\\u0077ord':'example value'} retry")).toBe("Failed: {[secret]} retry");
     expect(scrub('Failed: {"password":{"nested":["example value"]}')).toBe("Failed: {[secret]");
     expect(scrub('Failed: {"password":["example value"} trailing')).toBe("Failed: {[secret]");
     expect(scrub('Path C:\\work\\file.js and \\"quoted\\" prose')).toBe('Path C:\\work\\file.js and \\"quoted\\" prose');
+  });
+  it("handles maximum-size escaped-quote text without rescanning every escaped delimiter", () => {
+    for (const quote of ['"', "'"]) {
+      const text = `\\${quote}`.repeat(21000);
+      expect(scrub(text)).toHaveLength(200);
+      expect(scrub(`${text} {"password":"example secret"}`)).not.toContain("example");
+    }
   });
   it("describes a payload by key paths only", () => {
     expect(shape({ data: { issue: { id: "secret-value", tags: ["a"] } }, ts: 1 })).toEqual([
@@ -301,6 +319,7 @@ describe("webhook and inbox service", () => {
       ["first-example", JSON.stringify({ password: "first-example with spaces" }), "{[secret]}"],
       ["updated-example", JSON.stringify({ password: ["updated-example", "updated-example with spaces"] }), "{[secret]}"],
       ["encoded-example", JSON.stringify(JSON.stringify({ password: 'encoded-example with "quotes"' })), '"{[secret]}"'],
+      ["escaped-example", 'password=\\"escaped-example with spaces\\"', "[secret]"],
     ]) {
       expect((await deliver(source, secret, {
         data: { issue: {
