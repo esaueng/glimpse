@@ -81,24 +81,42 @@ sending the counts. Record the result in the [validation ledger](VALIDATION.md).
 `/api/issues`, `/api/sources` and `/hooks/*`, which return 503 until it is applied.
 Analytics and the Costs page are unaffected. Each step needs authorization:
 
-1. Apply the migration to Preview, then Production:
+1. Apply the migration to Preview, then Production (**done** in both):
 
    ```sh
    npx wrangler d1 migrations apply PREVIEW_DB --remote --config wrangler.preview-migrations.jsonc
    npx wrangler d1 migrations apply DB --remote
    ```
 
-2. In Zero Trust → Access → Applications → Glimpse, add a **Bypass** policy for the path
-   `glimpse.esau.app/hooks/`. Keep every other path behind the owner policy. Check that
-   `/` and `/api/issues` still require Access, and that `/hooks/x` returns 401 rather
-   than a login page.
-3. Open Glimpse → Sources → **Connect Workers Issues**. Copy the webhook URL and secret;
-   the secret is shown once. Rotate it from the same row.
-4. For each Worker, open Cloudflare → Workers & Pages → the Worker → **Issues** →
-   **Automations** → **Add automation**. Choose a trigger, then a **Generic webhook**
-   destination with the URL and the secret. Use **Send test**; Sources shows "test
-   received".
-5. Keep `observability.issues.enabled: true` in each Worker's Wrangler config.
+2. Put `/hooks` outside Access with its own application, as for the demo. **Done in
+   Production:** the self-hosted Access application **Glimpse webhooks** covers only
+   `glimpse.esau.app/hooks` (and its child paths), is hidden from the App Launcher, and has
+   one reusable Everyone **Bypass** policy, `Glimpse webhooks public access`. Access uses
+   the most specific matching path, so **Glimpse** keeps its owner-only Allow policy for
+   everything else. Never add the bypass to **Glimpse** itself: a policy there applies to
+   the whole hostname. Check that a `POST` to `/hooks/x` returns the Worker's 401 rather
+   than a login redirect, and that `/`, `/api/issues` and `/mcp` still redirect to Access.
+3. Exempt webhook POSTs from the zone-wide **Managed Challenge** custom rule on `esau.app`
+   (named "Managed Challaenege"). Cloudflare's webhook sender cannot solve a challenge,
+   so without this its test gets 403 and the destination cannot be saved. **Done in
+   Production** (ruleset version 16), beside the `/demo` exception:
+   `and not (http.host eq "glimpse.esau.app" and http.request.method eq "POST" and starts_with(http.request.uri.path, "/hooks/"))`.
+   The webhook still needs its secret, and every other host, path and method stays challenged.
+4. Open Glimpse → Sources → **Connect Workers Issues** once. Copy the webhook URL and
+   secret; the secret is shown once. Rotate it from the same row. Each click creates a
+   separate source, so delete any you do not use.
+5. In Cloudflare → Manage account → Notifications → Destinations, create a **Generic
+   Webhook** with that URL and secret. Cloudflare tests it on save; Sources shows "test
+   received". **Done in Production:** destination **Glimpse issues**.
+6. Route issues to it with a notification policy of type
+   `workers_observability_real_time_issue` (**Real-Time Issue**) and no filters, which
+   covers every Worker in the account. The dashboard's notification picker does not list
+   this type yet, so create it through the API
+   (`POST /accounts/{account_id}/alerting/v3/policies` with
+   `mechanisms.webhooks: [{id: <destination id>}]`). **Done in Production:** policy
+   **Workers Issues to Glimpse**. A single issue can also be sent by hand from its page
+   (Observability → Issues → the issue → **Send to**).
+7. Keep `observability.issues.enabled: true` in each Worker's Wrangler config.
    Otherwise the next deploy turns Issues off.
 
 The Issues payload is not documented by Cloudflare. The adapter reads the documented
