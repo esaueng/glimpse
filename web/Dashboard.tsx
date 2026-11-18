@@ -426,11 +426,11 @@ export function Dashboard({
           {!analyticsView && <div className="controls" ref={setActions} />}
           {analyticsView && (
             <div className="controls">
+              {view === "sources" && showChannels && channelToggle(true)}
               <RangePicker
                 value={filter}
                 onChange={(t) => apply({ ...t, app: filter.app, channel: filter.channel })}
               />
-              {view === "sources" && showChannels && channelToggle(true)}
               <div className="refresh">
                 <span className="status" role="status" aria-live="polite">
                   {loading

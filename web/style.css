@@ -434,7 +434,7 @@ main {
   margin: 0 8px 0 -4px;
   padding: 2px;
   background: var(--sunken);
-  border: 1px solid var(--line);
+  border: 1px solid var(--control);
   border-radius: 7px;
 }
 .channel-toggle.standalone {
@@ -460,10 +460,18 @@ main {
   font-weight: 600;
   box-shadow: 0 0 0 1px var(--control);
 }
+/* Narrower: the time controls wrap under the tabs. Layout follows DOM order
+   (title, tabs, time), so focus order matches what is seen. */
 @container page (max-width: 1080px) {
-  .app-tabs {
-    order: 3;
+  .controls {
     flex-basis: 100%;
+    justify-content: flex-start;
+    margin-left: 0;
+    padding-top: 6px;
+    border-top: 1px solid var(--line-soft);
+  }
+  .app-tab {
+    margin-bottom: 0;
   }
 }
 /* Segmented controls: inbox tabs and filters. */
@@ -2354,9 +2362,6 @@ footer {
     flex: 1 1 0;
     min-width: 0;
   }
-  .refresh {
-    order: 1;
-  }
   /* The update time stays announced but only the button shows. */
   .refresh .status {
     position: absolute;
@@ -2375,6 +2380,13 @@ footer {
   }
   .app-tab {
     flex: none;
+  }
+  /* On Sources the channel toggle takes its own line so the timeframe keeps the width. */
+  .channel-toggle.standalone {
+    flex-basis: 100%;
+  }
+  .channel-toggle.standalone button {
+    flex: 1;
   }
   .growth li {
     grid-template-columns: 84px minmax(0, 1fr) auto;
@@ -2462,6 +2474,7 @@ footer {
   }
   .refresh button {
     width: 44px;
+    min-height: 44px;
   }
   .data-disclosure summary,
   .more summary,

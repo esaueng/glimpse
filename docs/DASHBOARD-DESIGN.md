@@ -19,10 +19,11 @@ scrolls. One row when it fits: the title, then app tabs (All apps and one per ap
 `aria-pressed`, selection shown by underline, weight and colour, with the
 underline on the header's bottom edge), then the timeframe picker, an
 "Updated HH:MM UTC" status and icon Refresh on the right. Below a 1080px content
-width the tabs take their own row under the title. The OpenZCAD channel toggle
+width the time controls wrap to a row under the tabs. Layout never reorders the
+DOM (title, tabs, time), so focus order matches what is seen. The OpenZCAD channel toggle
 (Beta, Stable) sits right after the OpenZCAD tab whenever OpenZCAD data is in
-scope (All apps or OpenZCAD). On Sources, which has no tabs, it appears beside
-the timeframe as "OpenZCAD Beta | Stable". Changes apply immediately. Pages
+scope (All apps or OpenZCAD). On Sources, which has no tabs, it appears before
+the timeframe as "OpenZCAD Beta | Stable" (its own row on mobile). Changes apply immediately. Pages
 without the analytics controls render their own actions into the header area
 (Costs puts its Refresh and status there). No subtitle, scope sentence or
 footer: the controls show the scope, and every opt-in panel or figure carries an
@@ -167,8 +168,8 @@ for metrics Glimpse does not record, or that the snapshot did not carry (the not
 says whether OpenZCAD did not send it or migration 0005 is pending). A count held
 back by the k-threshold shows "Withheld (fewer than 5)", never a number.
 
-Mobile (≤760px): the timeframe trigger and Refresh share a row, the app tabs
-scroll sideways under them, the timeframe trigger and its
+Mobile (≤760px): the app tabs scroll sideways under the title, the timeframe
+trigger and Refresh share the row below them, the timeframe trigger and its
 popover span the width, stat strips reflow, wide tables scroll inside labelled regions, slow-
 operation bars move under their labels. No horizontal page overflow.
 
