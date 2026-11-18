@@ -1,5 +1,6 @@
 import {
   Component,
+  Fragment,
   lazy,
   Suspense,
   useEffect,
@@ -270,6 +271,31 @@ export function Dashboard({
     return () => document.removeEventListener("keydown", close);
   }, [menuOpen]);
   const applied = data?.basic.range ?? { ...filter, level: "basic" };
+  // Beta and Stable report separately; `standalone` adds the app name where no tab carries it.
+  const channelToggle = (standalone: boolean) => (
+    <div
+      className={standalone ? "channel-toggle standalone" : "channel-toggle"}
+      role="group"
+      aria-label="OpenZCAD channel"
+      title="OpenZCAD release channel"
+    >
+      {standalone && (
+        <span className="filter-prefix" aria-hidden="true">
+          OpenZCAD
+        </span>
+      )}
+      {OPENZCAD_CHANNELS.map((site) => (
+        <button
+          key={site}
+          type="button"
+          aria-pressed={(channel ?? "beta") === site}
+          onClick={() => apply({ ...filter, channel: site })}
+        >
+          {site === "beta" ? "Beta" : "Stable"}
+        </button>
+      ))}
+    </div>
+  );
   return (
     <div className="shell">
       <a
@@ -373,50 +399,38 @@ export function Dashboard({
           <h1 ref={heading} tabIndex={-1}>
             {page.title}
           </h1>
+          {analyticsView && view !== "sources" && (
+            // Apps are peers, so they read as tabs; the OpenZCAD channel sits
+            // beside the OpenZCAD tab whenever OpenZCAD data is in scope.
+            <div className="app-tabs" role="group" aria-label="App">
+              {appChoices.map(([id, name]) => (
+                <Fragment key={id}>
+                  <button
+                    type="button"
+                    className="app-tab"
+                    aria-pressed={filter.app === id}
+                    onClick={() => apply({ ...filter, app: id })}
+                  >
+                    {id === "all" ? (
+                      <span className="swatch all" aria-hidden="true" />
+                    ) : (
+                      <span className={`swatch ${id}`} aria-hidden="true" />
+                    )}
+                    {name}
+                  </button>
+                  {id === "openzcad" && showChannels && channelToggle(false)}
+                </Fragment>
+              ))}
+            </div>
+          )}
           {!analyticsView && <div className="controls" ref={setActions} />}
           {analyticsView && (
             <div className="controls">
+              {view === "sources" && showChannels && channelToggle(true)}
               <RangePicker
                 value={filter}
                 onChange={(t) => apply({ ...t, app: filter.app, channel: filter.channel })}
               />
-              {view !== "sources" && (
-                <div className="app-filter" role="group" aria-label="App">
-                  {appChoices.map(([id, name]) => (
-                    <button
-                      key={id}
-                      type="button"
-                      aria-pressed={filter.app === id}
-                      onClick={() => apply({ ...filter, app: id })}
-                    >
-                      {id !== "all" && <span className={`swatch ${id}`} aria-hidden="true" />}
-                      {name}
-                    </button>
-                  ))}
-                </div>
-              )}
-              {showChannels && (
-                <div
-                  className="app-filter channel-filter"
-                  role="group"
-                  aria-label="OpenZCAD channel"
-                  title="OpenZCAD release channel"
-                >
-                  <span className="filter-prefix" aria-hidden="true">
-                    ZCAD
-                  </span>
-                  {OPENZCAD_CHANNELS.map((site) => (
-                    <button
-                      key={site}
-                      type="button"
-                      aria-pressed={(channel ?? "beta") === site}
-                      onClick={() => apply({ ...filter, channel: site })}
-                    >
-                      {site === "beta" ? "Beta" : "Stable"}
-                    </button>
-                  ))}
-                </div>
-              )}
               <div className="refresh">
                 <span className="status" role="status" aria-live="polite">
                   {loading
@@ -424,7 +438,7 @@ export function Dashboard({
                     : error
                       ? "Refresh failed"
                       : data
-                        ? `${utcTime(data.basic.receivedAt)} UTC`
+                        ? `Updated ${utcTime(data.basic.receivedAt).slice(0, 5)} UTC`
                         : ""}
                 </span>
                 <button

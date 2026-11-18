@@ -332,11 +332,15 @@ main {
   width: 100%;
   max-width: 1320px;
   margin: 0 auto;
-  padding: 16px var(--page-x) 48px;
+  padding: 0 var(--page-x) 40px;
   display: flex;
   flex-direction: column;
   gap: 16px;
   min-width: 0;
+  container: page / inline-size;
+}
+.demo-banner {
+  margin-top: 12px;
 }
 .sr-only {
   position: absolute;
@@ -360,14 +364,15 @@ main {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  justify-content: space-between;
-  gap: 12px 20px;
-  min-height: 40px;
-  margin: 0 calc(-1 * var(--page-x)) -4px;
-  padding: 12px var(--page-x);
+  gap: 0 16px;
+  margin: 0 calc(-1 * var(--page-x)) -2px;
+  padding: 0 var(--page-x);
   background: color-mix(in srgb, var(--canvas) 86%, transparent);
   backdrop-filter: blur(12px);
   border-bottom: 1px solid var(--line-soft);
+}
+.page-head h1 {
+  padding: 12px 0;
 }
 .controls:empty {
   display: none;
@@ -378,9 +383,98 @@ main {
   align-items: center;
   justify-content: flex-end;
   gap: 8px;
+  margin-left: auto;
+  padding: 9px 0;
 }
-/* Segmented controls: the app and channel filters and the inbox tabs. */
-.app-filter,
+/* App tabs share the title row; their underline sits on the header's edge.
+   When the row is too narrow they take a row of their own (see @container). */
+.app-tabs {
+  display: flex;
+  align-self: stretch;
+  align-items: stretch;
+  gap: 2px;
+  min-width: 0;
+}
+.app-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+  margin-bottom: -1px;
+  padding: 0 12px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  background: transparent;
+  color: #c3d0e3;
+  font-size: calc(13 * var(--text-px));
+  font-weight: 450;
+  white-space: nowrap;
+}
+.app-tab:hover {
+  background: transparent;
+  color: var(--text);
+  border-bottom-color: var(--line);
+}
+/* Selection: underline, weight and colour together. */
+.app-tab[aria-pressed="true"] {
+  color: var(--text);
+  font-weight: 600;
+  border-bottom-color: var(--accent);
+}
+.swatch.all {
+  background: transparent;
+  box-shadow: inset 0 0 0 1.5px var(--muted);
+}
+.channel-toggle {
+  display: inline-flex;
+  align-self: center;
+  align-items: center;
+  gap: 2px;
+  margin: 0 8px 0 -4px;
+  padding: 2px;
+  background: var(--sunken);
+  border: 1px solid var(--control);
+  border-radius: 7px;
+}
+.channel-toggle.standalone {
+  margin: 0;
+}
+.channel-toggle button {
+  min-height: 24px;
+  padding: 1px 9px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: #c3d0e3;
+  font-size: calc(12 * var(--text-px));
+  font-weight: 450;
+}
+.channel-toggle button:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+.channel-toggle button[aria-pressed="true"] {
+  background: var(--surface-2);
+  color: var(--text);
+  font-weight: 600;
+  box-shadow: 0 0 0 1px var(--control);
+}
+/* Narrower: the time controls wrap under the tabs. Layout follows DOM order
+   (title, tabs, time), so focus order matches what is seen. */
+@container page (max-width: 1080px) {
+  .controls {
+    flex-basis: 100%;
+    justify-content: flex-start;
+    margin-left: 0;
+    padding-top: 6px;
+    border-top: 1px solid var(--line-soft);
+  }
+  .app-tab {
+    margin-bottom: 0;
+  }
+}
+/* Segmented controls: inbox tabs and filters. */
 .segmented {
   display: inline-flex;
   flex-wrap: wrap;
@@ -391,7 +485,6 @@ main {
   border: 1px solid var(--line);
   border-radius: 8px;
 }
-.app-filter button,
 .segmented button {
   display: inline-flex;
   align-items: center;
@@ -405,13 +498,11 @@ main {
   font-size: calc(13 * var(--text-px));
   font-weight: 450;
 }
-.app-filter button:hover,
 .segmented button:hover {
   background: var(--hover);
   color: var(--text);
 }
 /* Selection is carried by fill, outline and weight, not colour alone. */
-.app-filter button[aria-pressed="true"],
 .segmented button[aria-pressed="true"] {
   background: var(--surface-2);
   color: var(--text);
@@ -419,7 +510,7 @@ main {
   box-shadow: 0 0 0 1px var(--control);
 }
 .filter-prefix {
-  padding: 0 4px 0 8px;
+  padding: 0 4px 0 6px;
   font-size: calc(11 * var(--text-px));
   font-weight: 600;
   letter-spacing: 0.04em;
@@ -704,7 +795,7 @@ main {
 .content {
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 16px;
   animation: rise 220ms var(--ease);
 }
 .content.is-loading {
@@ -813,10 +904,10 @@ main {
   background: var(--surface);
   border: 1px solid var(--line-soft);
   border-radius: var(--radius);
-  padding: 18px 20px;
+  padding: 16px 18px;
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 14px;
 }
 .panel-heading {
   display: flex;
@@ -916,7 +1007,7 @@ main {
   min-width: 0;
   /* Long words wrap instead of being clipped when text is enlarged. */
   overflow-wrap: break-word;
-  padding: 16px 20px 18px;
+  padding: 14px 18px 16px;
   display: flex;
   flex-direction: column;
   gap: 4px;
@@ -1653,8 +1744,8 @@ code {
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 14px;
-  padding: 18px 20px;
+  gap: 12px;
+  padding: 16px 18px;
   background: var(--surface);
   border: 1px solid var(--line-soft);
   border-radius: var(--radius);
@@ -1688,6 +1779,21 @@ code {
 }
 .health-card h3 {
   font-size: calc(15 * var(--text-px));
+}
+/* One app in scope: its figures and stats share a row instead of stretching. */
+.health-card:only-child {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.3fr);
+  align-items: end;
+  gap: 12px 24px;
+}
+.health-card:only-child header {
+  grid-column: 1 / -1;
+}
+@container page (max-width: 720px) {
+  .health-card:only-child {
+    display: flex;
+  }
 }
 .health-main {
   display: grid;
@@ -2168,11 +2274,8 @@ footer {
   /* The top bar is the sticky element here; the page head scrolls with the page. */
   .page-head {
     position: static;
-    margin: 0;
-    padding: 0;
     background: none;
     backdrop-filter: none;
-    border: 0;
   }
   .sidebar {
     position: sticky;
@@ -2231,8 +2334,8 @@ footer {
     --page-x: 16px;
   }
   main {
-    padding: 16px var(--page-x) 40px;
-    gap: 20px;
+    padding: 0 var(--page-x) 40px;
+    gap: 16px;
   }
   .skeleton-row {
     grid-template-columns: 1fr;
@@ -2259,9 +2362,6 @@ footer {
     flex: 1 1 0;
     min-width: 0;
   }
-  .refresh {
-    order: 1;
-  }
   /* The update time stays announced but only the button shows. */
   .refresh .status {
     position: absolute;
@@ -2270,17 +2370,23 @@ footer {
     overflow: hidden;
     clip-path: inset(50%);
   }
-  .app-filter {
-    order: 2;
-    width: 100%;
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+  .page-head h1 {
+    padding: 12px 0 0;
   }
-  .app-filter button {
-    justify-content: center;
+  /* Tabs scroll sideways rather than wrap. */
+  .app-tabs {
+    overflow-x: auto;
+    scrollbar-width: none;
   }
-  .channel-filter {
-    grid-template-columns: auto repeat(2, minmax(0, 1fr));
+  .app-tab {
+    flex: none;
+  }
+  /* On Sources the channel toggle takes its own line so the timeframe keeps the width. */
+  .channel-toggle.standalone {
+    flex-basis: 100%;
+  }
+  .channel-toggle.standalone button {
+    flex: 1;
   }
   .growth li {
     grid-template-columns: 84px minmax(0, 1fr) auto;
@@ -2360,13 +2466,15 @@ footer {
   select,
   input,
   .nav-group button,
-  .app-filter button,
+  .app-tab,
+  .channel-toggle button,
   .menu-toggle,
   .range-option {
     min-height: 44px;
   }
   .refresh button {
     width: 44px;
+    min-height: 44px;
   }
   .data-disclosure summary,
   .more summary,

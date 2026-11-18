@@ -14,13 +14,18 @@ carried by pills and text. At 900px
 and below the sidebar becomes a sticky top bar with a menu button
 (`aria-expanded`, Escape closes) that reveals the same navigation.
 
-Page head, one row, sticky above 900px so the scope stays in reach while the
-page scrolls: title on the left; timeframe picker, segmented app filter
-(All apps and one button per app, `aria-pressed`), the OpenZCAD channel filter
-(a "ZCAD" prefix with Beta and Stable buttons, shown for All apps and OpenZCAD),
-last update time and icon Refresh on the right. Changes apply immediately.
-Pages without the analytics controls render their own actions into the same
-header area (Costs puts its Refresh and status there). No subtitle, scope sentence or
+Page head, sticky above 900px so the scope stays in reach while the page
+scrolls. One row when it fits: the title, then app tabs (All apps and one per app,
+`aria-pressed`, selection shown by underline, weight and colour, with the
+underline on the header's bottom edge), then the timeframe picker, an
+"Updated HH:MM UTC" status and icon Refresh on the right. Below a 1080px content
+width the time controls wrap to a row under the tabs. Layout never reorders the
+DOM (title, tabs, time), so focus order matches what is seen. The OpenZCAD channel toggle
+(Beta, Stable) sits right after the OpenZCAD tab whenever OpenZCAD data is in
+scope (All apps or OpenZCAD). On Sources, which has no tabs, it appears before
+the timeframe as "OpenZCAD Beta | Stable" (its own row on mobile). Changes apply immediately. Pages
+without the analytics controls render their own actions into the header area
+(Costs puts its Refresh and status there). No subtitle, scope sentence or
 footer: the controls show the scope, and every opt-in panel or figure carries an
 "Opted-in users" badge or an asterisk explained on the page. A failed load shows
 one error line and keeps the last results. Copy stays short: labels and values,
@@ -137,7 +142,9 @@ Structure: panels sit on a soft line; figures inside a card never get boxes of
 their own. Grouped figures (health-card stats, At a glance, feature categories,
 account activity) share 1px hairline dividers, like the stat strip. Rows that
 lead elsewhere (health cards, Needs attention) are clickable across their
-whole area through their existing link button.
+whole area through their existing link button. With one app in scope, its
+health card puts the request figure and its stats side by side instead of
+stretching them across the page.
 
 Motion: 140ms colour and border transitions on controls and rows, a 220ms
 fade-in when a page opens, a short pop for the timeframe popover and a pulsing
@@ -161,8 +168,8 @@ for metrics Glimpse does not record, or that the snapshot did not carry (the not
 says whether OpenZCAD did not send it or migration 0005 is pending). A count held
 back by the k-threshold shows "Withheld (fewer than 5)", never a number.
 
-Mobile (≤760px): the timeframe trigger and Refresh share a row, the app filter
-is a 2×2 grid, the timeframe trigger and its
+Mobile (≤760px): the app tabs scroll sideways under the title, the timeframe
+trigger and Refresh share the row below them, the timeframe trigger and its
 popover span the width, stat strips reflow, wide tables scroll inside labelled regions, slow-
 operation bars move under their labels. No horizontal page overflow.
 
