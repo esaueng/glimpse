@@ -25,6 +25,17 @@ function niceStep(span: number) {
     scaled = raw / power;
   return (scaled <= 1 ? 1 : scaled <= 2 ? 2 : scaled <= 5 ? 5 : 10) * power;
 }
+/** While `active`, Escape calls `dismiss` (pointer readouts, WCAG 1.4.13). */
+export function useEscape(active: boolean, dismiss: () => void) {
+  useEffect(() => {
+    if (!active) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") dismiss();
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [active]);
+}
 export type Series = {
   name: string;
   values: number[];
@@ -170,6 +181,7 @@ export function LineChart({
       at = Math.round(((e.clientX - box.left) / Math.max(1, box.width)) * (days.length - 1));
     setHover(Math.min(days.length - 1, Math.max(0, at)));
   };
+  useEscape(hover !== null, () => setHover(null));
   const peakText =
     first && days[peakIndex]
       ? `Peak · ${shortDay(days[peakIndex])} · ${format(first.values[peakIndex] ?? 0)}`

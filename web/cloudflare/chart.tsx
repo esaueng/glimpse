@@ -1,4 +1,6 @@
+import { useState } from "react";
 import type { CloudflareData } from "../../src/cloudflare/model";
+import { useEscape } from "../charts";
 import { formatDay, formatMoney } from "./format";
 import { CfTable, Cell, Row } from "./table";
 
@@ -13,6 +15,8 @@ export function DailySpend({
   charges: CloudflareData["charges"];
   currency: string;
 }) {
+  const [hover, setHover] = useState<string | null>(null);
+  useEscape(hover !== null, () => setHover(null));
   const families = [...new Set(charges.map((c) => c.family))].sort();
   const daily = new Map<string, Map<string, number>>();
   for (const c of charges) {
@@ -39,19 +43,28 @@ export function DailySpend({
         role="img"
         aria-label="Daily costs stacked by product. Exact values and corrections are in the data table below."
       >
-        <div className="cf-spend-plot" aria-hidden="true">
+        <div
+          className="cf-spend-plot"
+          aria-hidden="true"
+          // Long ranges drop the gaps so every day fits the plot width.
+          style={{ gap: rows.length > 62 ? 0 : rows.length > 31 ? 1 : 3 }}
+          onPointerLeave={() => setHover(null)}
+        >
           {rows.map(([day, values]) => {
-            const sum = [...values.values()].reduce((a, b) => a + b, 0);
+            const sum = [...values.values()].reduce((a, b) => a + b, 0),
+              shown = families.filter((f) => (values.get(f) ?? 0) > 0).length;
             return (
               <div
-                className="cf-spend-col"
+                className={hover === day ? "cf-spend-col is-hovered" : "cf-spend-col"}
                 key={day}
-                title={`${formatDay(day)} · ${formatMoney(sum, currency)}`}
+                onPointerEnter={() => setHover(day)}
               >
                 <div
                   className="cf-spend-stack"
                   style={{
                     height: `${([...values.values()].reduce((a, b) => a + Math.max(0, b), 0) / max) * 100}%`,
+                    // Room for each charged product's 1px segment and the gaps between them.
+                    minHeight: Math.max(2, shown * 2 - 1),
                   }}
                 >
                   {families.map((family, i) => {
@@ -61,10 +74,12 @@ export function DailySpend({
                     ) : null;
                   })}
                 </div>
-                <span className="cf-spend-tip">
-                  <strong>{formatDay(day, false)}</strong>
-                  {formatMoney(sum, currency)}
-                </span>
+                {hover === day && (
+                  <span className="cf-spend-tip">
+                    <strong>{formatDay(day, false)}</strong>
+                    {formatMoney(sum, currency)}
+                  </span>
+                )}
               </div>
             );
           })}

@@ -58,7 +58,7 @@
 .cf-filters input {
   width: 100%;
   min-height: 34px;
-  border-color: var(--line);
+  border-color: var(--control);
   background-color: var(--sunken);
   color: var(--text);
   font-size: calc(13 * var(--text-px));
@@ -169,6 +169,7 @@
   gap: 6px;
 }
 .cf-spend-plot {
+  min-width: 0;
   display: flex;
   align-items: stretch;
   gap: 3px;
@@ -186,14 +187,13 @@
   border-radius: 4px 4px 0 0;
   transition: background-color var(--fast) var(--ease);
 }
-.cf-spend-col:hover {
+.cf-spend-col.is-hovered {
   background: var(--hover);
 }
 .cf-spend-stack {
   display: flex;
   flex-direction: column-reverse;
   gap: 1px;
-  min-height: 2px;
   border-radius: 3px 3px 0 0;
   overflow: hidden;
 }
@@ -209,7 +209,7 @@
   bottom: calc(100% + 6px);
   left: 50%;
   z-index: 2;
-  display: none;
+  display: flex;
   flex-direction: column;
   padding: 5px 9px;
   border: 1px solid var(--line);
@@ -220,14 +220,10 @@
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
   transform: translateX(-50%);
-  pointer-events: none;
 }
 .cf-spend-tip strong {
   font-weight: 600;
   color: var(--muted);
-}
-.cf-spend-col:hover .cf-spend-tip {
-  display: flex;
 }
 .cf-spend-col:first-child .cf-spend-tip {
   left: 0;
@@ -409,5 +405,14 @@
   }
   .cf-page .cf-buttons button {
     min-height: 40px;
+  }
+}
+
+/* Touch targets: the shared 44px rule, restated over the toolbar's compact sizes. */
+@media (max-width: 760px), (pointer: coarse) {
+  .cf-filters select,
+  .cf-filters input,
+  .cf-active button {
+    min-height: 44px;
   }
 }

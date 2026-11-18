@@ -565,7 +565,6 @@ main {
   align-items: center;
   gap: 10px;
   padding: 0 10px 0 5px;
-  border-color: var(--line);
   background: var(--sunken);
   font-weight: 500;
 }

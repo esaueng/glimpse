@@ -7,6 +7,7 @@ import { describe, expect, it } from "vitest";
 import { LineChart, shortDay } from "../web/charts";
 import { HeaderActions, PageActions, Panel, Skeleton, Tile } from "../web/ui";
 import { CoverageTable } from "../web/cloudflare/tables";
+import { DailySpend } from "../web/cloudflare/chart";
 import { AccountActivity, Issues, SlowOperations, Storage, Usage } from "../web/views";
 import { Home, Performance, Sources } from "../web/pages";
 import { demoStats } from "../web/demo-data";
@@ -372,4 +373,36 @@ it("shows stable adoption counts separately from opted-in workspace opens", () =
   const empty = html(<Usage app="openzcad" data={{ basic: withoutEvents, optional }} />);
   expect(empty).toContain('Workspace sessions</span><strong class="tile-value">—</strong>');
   expect(empty).toContain("No app starts received in this range");
+});
+
+describe("DailySpend", () => {
+  const charge = (day: string, family: string, cost: number) =>
+    ({ start: `${day}T00:00:00Z`, family, cost }) as Parameters<typeof DailySpend>[0]["charges"][number];
+  const days = (n: number) =>
+    Array.from({ length: n }, (_, i) => new Date(Date.UTC(2026, 0, 1 + i)).toISOString().slice(0, 10));
+
+  it("drops column gaps on long ranges so the plot never overflows", () => {
+    const long = html(<DailySpend currency="USD" charges={days(200).map((d) => charge(d, "D1", 1e6))} />);
+    expect(long).toContain('class="cf-spend-plot" aria-hidden="true" style="gap:0"');
+    const month = html(<DailySpend currency="USD" charges={days(30).map((d) => charge(d, "D1", 1e6))} />);
+    expect(month).toContain('style="gap:3px"');
+  });
+
+  it("keeps room for every charged product on a small day", () => {
+    const out = html(
+      <DailySpend
+        currency="USD"
+        charges={[
+          charge("2026-01-01", "Workers", 100e6),
+          charge("2026-01-02", "D1", 0.25e6),
+          charge("2026-01-02", "R2", 0.25e6),
+          charge("2026-01-02", "Workers", 0.25e6),
+        ]}
+      />,
+    );
+    // Three 1px segments and two 1px gaps.
+    expect(out).toContain("min-height:5px");
+    // The day readout appears only while pointing at a column.
+    expect(out).not.toContain("cf-spend-tip");
+  });
 });
