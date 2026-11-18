@@ -11,14 +11,15 @@
 //   analytics and reports it in `pendingMigrations`, and the dashboard shows the affected
 //   fields as not collected. Ingestion falls back to the older columns (src/index.ts).
 
-export type Surface = "stats" | "cloudflare" | "census_activity" | "issues";
+export type Surface = "stats" | "cloudflare" | "census_activity" | "issues" | "openzcad_channels";
 export const OPTIONAL_SURFACES = [
   "census_activity",
+  "openzcad_channels",
 ] as const satisfies readonly Surface[];
 
 // Every file in migrations/ must be listed here, mapped to the API surfaces whose schema
 // depends on it; test/migrations.test.ts fails when a migration is added without this.
-// A migration listed only under an optional surface must be additive (nullable columns).
+// A migration listed only under an optional surface must be additive (new tables or nullable columns).
 export const REQUIRED_MIGRATIONS = {
   "0001_aggregates.sql": ["stats"],
   "0002_openlattice3d.sql": ["stats"],
@@ -26,6 +27,7 @@ export const REQUIRED_MIGRATIONS = {
   "0004_cloudflare.sql": ["cloudflare"],
   "0005_census_activity.sql": ["census_activity"],
   "0006_issues.sql": ["issues"],
+  "0007_openzcad_channels.sql": ["openzcad_channels"],
 } as const satisfies Record<string, readonly Surface[]>;
 
 // Wrangler's default ledger table (wrangler.jsonc sets no `migrations_table`).

@@ -149,6 +149,12 @@ export function Usage({ data, app }: { data: Loaded; app: string }) {
     latest = history.at(-1),
     cloud = includes(app, "openzcad"),
     apps = APPS.filter((a) => includes(app, a));
+  const adoption = data.basic.adoption?.at(-1);
+  const sessions = total(basic, "workspace_session", "openzcad");
+  const channel = data.basic.range.channel === "stable" ? "Stable" : "Beta";
+  const adoptionNote = adoption
+    ? `Snapshot · ${shortDay(adoption.day)} UTC`
+    : "No snapshot received in this range";
   const census = (key: "accounts" | "projects" | "revisions") =>
     latest ? number(latest[key]) : cloud ? "—" : "N/A";
   const change = (key: "accounts" | "projects" | "revisions") =>
@@ -232,10 +238,29 @@ export function Usage({ data, app }: { data: Loaded; app: string }) {
   };
   return (
     <>
-      <section className="section" aria-labelledby="people-heading">
-        <h2 id="people-heading" className="section-title">
-          People and accounts
-        </h2>
+      {cloud && (
+        <section className="section" aria-labelledby="people-heading">
+          <h2 id="people-heading" className="section-title">
+            People and accounts
+          </h2>
+          <div className="strip">
+            <Tile label="Total cloud accounts" value={adoption ? number(adoption.accounts) : "—"}>
+              {channel} · {adoptionNote}
+            </Tile>
+            <Tile label="Signed-in accounts" value={adoption ? number(adoption.signedInAccounts) : "—"}>
+              Accounts with a valid web sign-in
+            </Tile>
+            <Tile label="Web sign-in sessions" value={adoption ? number(adoption.signInSessions) : "—"}>
+              Valid browser logins at snapshot time
+            </Tile>
+            <Tile label="Workspace sessions" value={sessions ? number(sessions) : "—"}>
+              {sessions ? "Visible app starts received, including reloads" : "No app starts received in this range"}
+            </Tile>
+          </div>
+        </section>
+      )}
+      <section className="section" aria-labelledby="opted-in-heading">
+        <h2 id="opted-in-heading" className="section-title">Opted-in usage</h2>
         <div className="strip">
           <Tile label="Opted-in cloud accounts" value={census("accounts")}>
             {change("accounts")}
@@ -262,7 +287,7 @@ export function Usage({ data, app }: { data: Loaded; app: string }) {
       <div className="split">
         <Panel
           title="Cloud growth"
-          note="Daily OpenZCAD snapshots"
+          note={`Daily OpenZCAD ${channel} snapshots`}
           className="wide"
           na={notApplicable(app, ["openzcad"])}
         >

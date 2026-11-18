@@ -8,6 +8,7 @@ import {
   type ErrorInfo,
   type ReactNode,
 } from "react";
+import { OPENZCAD_CHANNELS } from "../src/contract";
 import { appName, type Loaded, type Range, type Stats } from "./data";
 import { useLoader, useUrlState, writeSearch } from "./hooks";
 import { RangePicker } from "./RangePicker";
@@ -118,9 +119,9 @@ function Privacy() {
     <section className="panel privacy-content">
       <h2>Detailed aggregates. No individual timelines.</h2>
       <p>
-        Basic collection measures backend API counts, errors and coarse latency.
-        All expanded statistics require explicit opt-in, with a fresh choice for
-        the expanded scope.
+        Basic collection measures API counts, errors and coarse latency.
+        OpenZCAD also reports total cloud accounts, active web logins and
+        visible app starts. Beta and stable report separately.
       </p>
       <h3>What is collected after opt-in</h3>
       <p>
@@ -133,8 +134,8 @@ function Privacy() {
       <p>
         Model contents, geometry, filenames, project names, emails, account or
         project IDs, URLs, raw messages or stacks, cookies, fingerprints,
-        visitor IDs, sessions or individual histories. Data stays separate per
-        app.
+        visitor IDs, session IDs or individual histories. Data stays separate per
+        app and OpenZCAD channel.
       </p>
       <h3>Withdrawal and reports</h3>
       <p>
@@ -153,9 +154,9 @@ function Privacy() {
       </p>
       <h3>Interpretation and retention</h3>
       <p>
-        90 UTC days of service aggregates. Snapshots represent consenting
-        accounts at one point in time; operations can repeat, fail delivery or
-        be spoofed. Unknown, not received and unsupported do not mean zero. No
+        90 UTC days of service aggregates. Account snapshots show the latest
+        totals in range. Workspace sessions include reloads and repeat visits,
+        and delivery can fail. Unknown, not received and unsupported do not mean zero. No
         anonymous unique-user count exists. Combined views do not track people
         across apps.
       </p>
@@ -205,21 +206,26 @@ export function Dashboard({
   const page = pageOf(view),
     analyticsView = page.data,
     // Sources reports every source, so it always reads all apps.
-    app = view === "sources" ? "all" : filter.app;
+    app = view === "sources" ? "all" : filter.app,
+    showChannels = app === "all" || app === "openzcad",
+    channel = showChannels ? filter.channel : undefined;
   // Basic and opt-in aggregates stay separate queries; each panel names its source.
-  const { data, loading, error, refresh } = useLoader<Loaded>(
+  const { data: loaded, loading, error, refresh } = useLoader<Loaded>(
     (signal) =>
       Promise.all([
-        loadStats({ app, from, to, level: "basic" }, signal),
-        loadStats({ app, from, to, level: "optional" }, signal),
+        loadStats({ app, from, to, ...(channel && { channel }), level: "basic" }, signal),
+        loadStats({ app, from, to, ...(channel && { channel }), level: "optional" }, signal),
       ]).then(([basic, optional]) => ({ basic, optional })),
-    [app, from, to, loadStats],
+    [app, channel, from, to, loadStats],
     {
       enabled: analyticsView,
       errorMessage: (e) =>
         e instanceof Error ? e.message : "Analytics unavailable.",
     },
   );
+  // A pending or failed channel switch must not show the previous channel's totals.
+  const data =
+    (loaded?.basic.range.channel ?? "beta") === (channel ?? "beta") ? loaded : null;
   const heading = useRef<HTMLHeadingElement>(null),
     shownView = useRef(view),
     baseTitle = useRef(document.title);
@@ -368,7 +374,7 @@ export function Dashboard({
             <div className="controls">
               <RangePicker
                 value={filter}
-                onChange={(t) => apply({ app: filter.app, ...t })}
+                onChange={(t) => apply({ ...t, app: filter.app, channel: filter.channel })}
               />
               {view !== "sources" && (
                 <div className="app-filter" role="group" aria-label="App">
@@ -381,6 +387,20 @@ export function Dashboard({
                     >
                       {id !== "all" && <span className={`swatch ${id}`} aria-hidden="true" />}
                       {name}
+                    </button>
+                  ))}
+                </div>
+              )}
+              {showChannels && (
+                <div className="app-filter" role="group" aria-label="OpenZCAD channel">
+                  {OPENZCAD_CHANNELS.map((site) => (
+                    <button
+                      key={site}
+                      type="button"
+                      aria-pressed={(channel ?? "beta") === site}
+                      onClick={() => apply({ ...filter, channel: site })}
+                    >
+                      {site === "beta" ? "ZCAD Beta" : "ZCAD Stable"}
                     </button>
                   ))}
                 </div>
@@ -437,7 +457,7 @@ export function Dashboard({
             {data ? " Showing the last successful results." : ""}
           </p>
         )}
-        <ErrorBoundary compact resetKey={`${view}:${app}:${from}:${to}`}>
+        <ErrorBoundary compact resetKey={`${view}:${app}:${channel}:${from}:${to}`}>
           {view === "costs" ? (
             <Suspense
               fallback={<p className="notice">Loading Cloudflare monitor…</p>}

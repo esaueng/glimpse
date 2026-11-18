@@ -7,11 +7,12 @@ import {
   type Census,
 } from "./expanded";
 import { access } from "./auth";
-import { dateRange, metric, type App } from "./contract";
+import { dateRange, metric, type App, type OpenZCADChannel } from "./contract";
 import { cloudflareApi } from "./cloudflare/api";
 import { logFailure } from "./errors";
 import { migrationPending, missingMigrations } from "./migrations";
 import { runScheduled } from "./schedule";
+import { writeAdoptionSnapshot } from "./openzcadAdoption";
 import { readStats } from "./stats";
 import { MCP_PATH, mcp } from "./mcp";
 import { HOOK_PREFIX, hook, issuesApi } from "./sources/api";
@@ -20,12 +21,14 @@ export async function record(
   app: App,
   value: unknown,
   now = new Date(),
+  channel: OpenZCADChannel = "beta",
 ): Promise<void> {
   const m = metric(value, app);
   if (!m) throw new Error("Invalid metric");
+  const table = channel === "stable" ? "daily_counts_stable" : "daily_counts";
   // Receipt-day only. No client timestamps, raw event table, or identifying dimensions.
   await env.DB.prepare(
-    `INSERT INTO daily_counts(day,app,level,event,bucket,count) VALUES(?,?,?,?,?,1)
+    `INSERT INTO ${table}(day,app,level,event,bucket,count) VALUES(?,?,?,?,?,1)
     ON CONFLICT(day,app,level,event,bucket) DO UPDATE SET count=count+1`,
   )
     .bind(now.toISOString().slice(0, 10), app, m.level, m.event, m.bucket)
@@ -36,6 +39,7 @@ export async function snapshot(
   app: App,
   value: unknown,
   now = new Date(),
+  channel: OpenZCADChannel = "beta",
 ): Promise<{ accepted: boolean }> {
   const c = census(value, app);
   if (!c) throw new Error("Invalid census");
@@ -43,7 +47,7 @@ export async function snapshot(
   const reported = ACTIVITY_FIELDS.some((k) => Object.hasOwn(c, k));
   try {
     // The k-threshold applies before storage: a withheld count is stored as NULL.
-    return await writeSnapshot(env.DB, app, day, thresholdActivity(c), reported);
+    return await writeSnapshot(env.DB, channel, app, day, thresholdActivity(c), reported);
   } catch (error) {
     // Migration 0005 is optional (src/migrations.ts). Until it is applied, keep accepting
     // the established census and drop only the activity counts it has no columns for.
@@ -52,17 +56,19 @@ export async function snapshot(
       console.warn(
         "Census activity counts dropped: migration 0005_census_activity.sql pending",
       );
-    return writeSnapshot(env.DB, app, day, c, null);
+    return writeSnapshot(env.DB, channel, app, day, c, null);
   }
 }
 /** `reported` true/false writes the 0005 columns; null writes only the 0003 columns. */
 async function writeSnapshot(
   db: D1Database,
+  channel: OpenZCADChannel,
   app: App,
   day: string,
   c: Census,
   reported: boolean | null,
 ): Promise<{ accepted: boolean }> {
+  const table = channel === "stable" ? "daily_census_stable" : "daily_census";
   const fields: string[] = ["generation", ...CENSUS_FIELDS];
   const values: (number | null)[] = [c.generation, ...CENSUS_FIELDS.map((k) => c[k])];
   if (reported !== null) {
@@ -75,10 +81,10 @@ async function writeSnapshot(
   }
   const result = await db
     .prepare(
-      `INSERT INTO daily_census(day,app,${fields.join(",")}) SELECT ?,?,${fields.map(() => "?").join(",")} WHERE ? > COALESCE((SELECT MAX(generation) FROM daily_census WHERE app=?),0)
+      `INSERT INTO ${table}(day,app,${fields.join(",")}) SELECT ?,?,${fields.map(() => "?").join(",")} WHERE ? > COALESCE((SELECT MAX(generation) FROM ${table} WHERE app=?),0)
     ON CONFLICT(day,app) DO UPDATE SET ${fields.map((k) => `${k}=excluded.${k}`).join(",")}
-    WHERE excluded.generation > daily_census.generation
-    AND excluded.generation > COALESCE((SELECT MAX(generation) FROM daily_census WHERE app=excluded.app AND day<>excluded.day),0)`,
+    WHERE excluded.generation > ${table}.generation
+    AND excluded.generation > COALESCE((SELECT MAX(generation) FROM ${table} WHERE app=excluded.app AND day<>excluded.day),0)`,
     )
     .bind(day, app, ...values, c.generation, app)
     .run();
@@ -86,14 +92,23 @@ async function writeSnapshot(
   return { accepted: result.meta.changes > 0 };
 }
 // Binding entrypoints fix app identity. There is intentionally no HTTP ingest API.
-export class OpenZCADIngest extends WorkerEntrypoint<Env> {
+class OpenZCADChannelIngest extends WorkerEntrypoint<Env> {
+  protected readonly channel: OpenZCADChannel = "beta";
+
   // Resolves { accepted: false } when a newer generation is already stored.
   async snapshot(value: unknown) {
-    return snapshot(this.env, "openzcad", value);
+    return snapshot(this.env, "openzcad", value, new Date(), this.channel);
+  }
+  async adoptionSnapshot(value: unknown) {
+    return writeAdoptionSnapshot(this.env.DB, this.channel, value);
   }
   async record(value: unknown) {
-    await record(this.env, "openzcad", value);
+    await record(this.env, "openzcad", value, new Date(), this.channel);
   }
+}
+export class OpenZCADIngest extends OpenZCADChannelIngest {}
+export class OpenZCADStableIngest extends OpenZCADChannelIngest {
+  protected override readonly channel = "stable";
 }
 export class OpenFEAIngest extends WorkerEntrypoint<Env> {
   async record(value: unknown) {

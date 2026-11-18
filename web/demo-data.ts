@@ -1,4 +1,4 @@
-import { APPS, BUCKETS, dateRange, metric, type Row } from "../src/contract";
+import { APPS, BUCKETS, dateRange, metric, type AdoptionRow, type Row } from "../src/contract";
 import {
   CELLS,
   EXPANDED,
@@ -29,7 +29,9 @@ export function demoStats(range: Range, now = new Date()): Stats {
   const parsed = dateRange(new URLSearchParams(range), now);
   if (!parsed) throw new Error("Choose a valid UTC range of at most 90 days.");
   const rows: Row[] = [],
-    census: CensusRow[] = [];
+    census: CensusRow[] = [],
+    adoption: AdoptionRow[] = [];
+  const stable = parsed.channel === "stable";
   for (
     let time = Date.parse(parsed.from);
     time <= Date.parse(parsed.to);
@@ -37,9 +39,18 @@ export function demoStats(range: Range, now = new Date()): Stats {
   ) {
     const day = new Date(time).toISOString().slice(0, 10);
     const dayIndex = Math.floor(time / 86400000);
+    if (parsed.level === "basic" && ["all", "openzcad"].includes(parsed.app)) {
+      const growth = dayIndex % 90;
+      adoption.push({
+        day,
+        accounts: (stable ? 808 : 210) + growth,
+        signedInAccounts: (stable ? 163 : 41) + Math.floor(growth / 5),
+        signInSessions: (stable ? 249 : 74) + Math.floor(growth / 3),
+      });
+    }
     for (const [index, app] of APPS.entries()) {
       if (parsed.app !== "all" && parsed.app !== app) continue;
-      const scale = [1, 0.62, 0.38][index];
+      const scale = [stable ? 1.6 : 1, 0.62, 0.38][index];
       const wave =
         1 +
         0.22 * Math.sin(dayIndex * 0.7 + index) +
@@ -56,6 +67,7 @@ export function demoStats(range: Range, now = new Date()): Stats {
         });
       }
       if (parsed.level === "basic") {
+        add("workspace_session", "none", 390);
         add("api_request", "none", 2400);
         add("api_error", "none", 9);
         BUCKETS.forEach((bucket, i) =>
@@ -127,7 +139,7 @@ export function demoStats(range: Range, now = new Date()): Stats {
       parsed.level === "optional" &&
       ["all", "openzcad"].includes(parsed.app)
     ) {
-      const growth = dayIndex % 90;
+      const growth = dayIndex % 90 + (stable ? 100 : 0);
       const lt1mib = 238 + growth,
         mib1to10 = 164 + growth,
         mib10to100 = 57,
@@ -160,6 +172,7 @@ export function demoStats(range: Range, now = new Date()): Stats {
     range: parsed,
     rows,
     census: census.reverse(),
+    ...(adoption.length ? { adoption } : {}),
     receivedAt: now.toISOString(),
   };
 }

@@ -1,10 +1,11 @@
-import { APPS, APP_NAMES, type App, type Row } from "../src/contract";
+import { APPS, APP_NAMES, type AdoptionRow, type App, type OpenZCADChannel, type Row } from "../src/contract";
 import { withheld, type ActivityField, type CensusRow } from "../src/expanded";
-export type Range = { app: string; level: string; from: string; to: string };
+export type Range = { app: string; level: string; from: string; to: string; channel?: OpenZCADChannel };
 export type Stats = {
   range: Range;
   rows: Row[];
   census: CensusRow[];
+  adoption?: AdoptionRow[];
   /** Optional-schema migrations not yet applied (never blocking), e.g. 0005_census_activity.sql. */
   pendingMigrations?: string[];
   receivedAt: string;

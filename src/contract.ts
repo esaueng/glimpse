@@ -21,6 +21,14 @@ export const OPTIONAL = [
   "operation_latency",
 ] as const;
 export const APPS = ["openzcad", "openfea", "openlattice3d"] as const;
+export const OPENZCAD_CHANNELS = ["beta", "stable"] as const;
+export type OpenZCADChannel = (typeof OPENZCAD_CHANNELS)[number];
+export interface AdoptionRow {
+  day: string;
+  accounts: number;
+  signedInAccounts: number;
+  signInSessions: number;
+}
 export type App = (typeof APPS)[number];
 export const APP_NAMES: Record<App, string> = {
   openzcad: "OpenZCAD",
@@ -57,6 +65,10 @@ export function metric(value: unknown, app: App): Metric | null {
   if (typeof v.event !== "string" || typeof v.bucket !== "string") return null;
   const allowed: readonly string[] =
     v.level === "basic" ? BASIC : v.level === "optional" ? OPTIONAL : [];
+  if (v.level === "basic" && v.event === "workspace_session")
+    return app === "openzcad" && v.bucket === "none"
+      ? { level: "basic", event: v.event, bucket: "none" }
+      : null;
   if (!allowed.includes(v.event)) {
     return v.level === "optional" && expandedMetric(v.event, v.bucket, app)
       ? { level: "optional", event: v.event, bucket: v.bucket }
@@ -88,10 +100,10 @@ export function metric(value: unknown, app: App): Metric | null {
 export function dateRange(
   params: URLSearchParams,
   today = new Date(),
-): { from: string; to: string; app: App | "all"; level: Level } | null {
+): { from: string; to: string; app: App | "all"; level: Level; channel?: OpenZCADChannel } | null {
   if (
     [...params.keys()].some(
-      (k) => !["from", "to", "app", "level"].includes(k),
+      (k) => !["from", "to", "app", "level", "channel"].includes(k),
     ) ||
     [...params.keys()].some((k) => params.getAll(k).length !== 1)
   )
@@ -100,7 +112,8 @@ export function dateRange(
   const from =
     params.get("from") ?? isoDay(new Date(today.getTime() - 29 * 86400000));
   const app = params.get("app") ?? "all",
-    level = params.get("level") ?? "basic";
+    level = params.get("level") ?? "basic",
+    channel = params.get("channel");
   if (
     !validDay(from) ||
     !validDay(to) ||
@@ -108,8 +121,15 @@ export function dateRange(
     to > isoDay(today) ||
     (Date.parse(to) - Date.parse(from)) / 86400000 > 89 ||
     !["all", ...APPS].includes(app) ||
-    !["basic", "optional"].includes(level)
+    !["basic", "optional"].includes(level) ||
+    (channel !== null && (
+      !["all", "openzcad"].includes(app) ||
+      !OPENZCAD_CHANNELS.some((candidate) => candidate === channel)
+    ))
   )
     return null;
-  return { from, to, app: app as App | "all", level: level as Level };
+  return {
+    from, to, app: app as App | "all", level: level as Level,
+    ...(channel ? { channel: channel as OpenZCADChannel } : {}),
+  };
 }
