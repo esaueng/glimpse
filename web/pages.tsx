@@ -1,6 +1,6 @@
 // Home, Performance and Sources: the monitoring pages built on the daily aggregates.
 import { APPS, BUCKETS, type App } from "../src/contract";
-import { DataTable, LineChart, Sparkline, StackBar, shortDay, timingLabels, type Tone } from "./charts";
+import { DataTable, Legend, LineChart, Sparkline, StackBar, shortDay, timingLabels, type Tone } from "./charts";
 import {
   appName,
   bucketCounts,
@@ -348,7 +348,12 @@ export function Performance({ data, app }: { data: Loaded; app: string }) {
 
       <Panel
         title="API response time by app"
-        note="Coarse ranges · all users"
+        note={
+          <Legend
+            label="Timing ranges"
+            items={timingLabels.map((name, i) => ({ name, tone: timingTones[i]! }))}
+          />
+        }
       >
         <ul className="slow-list">
           {latency.map(({ app: a, values }) => {
@@ -399,6 +404,7 @@ export function Performance({ data, app }: { data: Loaded; app: string }) {
             </tbody>
           </table>
         </DataTable>
+        <p className="panel-note">Coarse ranges · all users</p>
       </Panel>
 
       <SlowOperations data={data} app={app} />

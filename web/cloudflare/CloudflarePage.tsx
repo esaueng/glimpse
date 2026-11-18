@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { loadErrorMessage } from "../api";
 import { useLoader, useUrlState } from "../hooks";
-import { Tile } from "../ui";
+import { HeaderActions, Skeleton, Tile } from "../ui";
 import {
   allocate,
   alerts,
@@ -234,6 +234,7 @@ export function CloudflarePage({
             ? "Fictional sample data"
             : "Cloudflare-reported costs and resource usage"}
         </p>
+        <HeaderActions>
         <div className="refresh">
           <span className="status" role="status" aria-live="polite">
             {status}
@@ -250,6 +251,7 @@ export function CloudflarePage({
             <RefreshIcon />
           </button>
         </div>
+        </HeaderActions>
       </div>
       {error && (
         <p role="alert" className="error-message">
@@ -257,6 +259,7 @@ export function CloudflarePage({
           {data ? " Showing stale results." : ""}
         </p>
       )}
+      {loading && !data && <Skeleton label="Loading Cloudflare monitor…" />}
       {!loading && data && !data.configured && (
         <section className="panel">
           <h2>Connect Esau’s Cloudflare account</h2>

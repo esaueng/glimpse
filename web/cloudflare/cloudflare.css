@@ -27,10 +27,15 @@
   flex-direction: column;
   gap: 12px;
 }
+/* Filters sit in one toolbar row, styled like the analytics controls. */
 .cf-filters {
   display: flex;
   flex-wrap: wrap;
-  gap: 12px;
+  gap: 10px;
+  padding: 12px 14px;
+  background: var(--surface);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius);
 }
 .cf-filters label,
 .cf-editor label,
@@ -44,15 +49,23 @@
 .cf-filters label {
   flex: 1 1 150px;
   min-width: 0;
+  gap: 4px;
+  font-size: calc(11 * var(--text-px));
+  font-weight: 500;
+  color: var(--faint);
 }
 .cf-filters select,
 .cf-filters input {
   width: 100%;
+  min-height: 34px;
+  border-color: var(--control);
+  background-color: var(--sunken);
   color: var(--text);
-  font-size: 1rem;
+  font-size: calc(13 * var(--text-px));
 }
 .cf-filters select[data-active] {
   border-color: var(--accent);
+  background-color: color-mix(in srgb, var(--accent) 8%, var(--sunken));
 }
 .cf-active {
   display: flex;
@@ -71,10 +84,15 @@
   list-style: none;
 }
 .cf-active li {
-  padding: 2px 8px;
-  border: 1px solid var(--accent);
-  border-radius: 4px;
+  padding: 1px 9px;
+  border: 1px solid color-mix(in srgb, var(--accent) 60%, transparent);
+  border-radius: 999px;
   color: var(--accent);
+}
+.cf-active button {
+  min-height: 28px;
+  padding: 2px 10px;
+  font-size: calc(12 * var(--text-px));
 }
 
 /* Panel heading actions */
@@ -144,31 +162,77 @@
   color: var(--muted);
 }
 
-/* Daily stacked bars */
+/* Daily stacked columns */
 .cf-spend {
-  display: grid;
-  gap: 5px;
-  max-height: 380px;
-  overflow-y: auto;
-}
-.cf-spend-row {
-  display: grid;
-  grid-template-columns: 52px minmax(0, 1fr) 88px;
-  gap: 12px;
-  align-items: center;
-  font-size: calc(12 * var(--text-px));
-}
-.cf-spend-row > .numeric {
-  text-align: right;
-}
-.cf-spend-track {
   display: flex;
-  min-height: 12px;
-  background: var(--sunken);
+  flex-direction: column;
+  gap: 6px;
 }
-.cf-spend-track i {
+.cf-spend-plot {
+  min-width: 0;
+  display: flex;
+  align-items: stretch;
+  gap: 3px;
+  height: 170px;
+  padding-top: 8px;
+  border-bottom: 1px solid var(--control);
+}
+.cf-spend-col {
+  position: relative;
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  border-radius: 4px 4px 0 0;
+  transition: background-color var(--fast) var(--ease);
+}
+.cf-spend-col.is-hovered {
+  background: var(--hover);
+}
+.cf-spend-stack {
+  display: flex;
+  flex-direction: column-reverse;
+  gap: 1px;
+  border-radius: 3px 3px 0 0;
+  overflow: hidden;
+}
+.cf-spend-stack i {
   display: block;
-  min-height: 12px;
+  flex-basis: 0;
+  min-height: 1px;
+  forced-color-adjust: none;
+}
+/* Pointer readout for one day; the data table holds the exact values. */
+.cf-spend-tip {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 50%;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  padding: 5px 9px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-2);
+  box-shadow: 0 4px 12px rgb(0 0 0 / 35%);
+  font-size: calc(12 * var(--text-px));
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  transform: translateX(-50%);
+}
+.cf-spend-tip strong {
+  font-weight: 600;
+  color: var(--muted);
+}
+.cf-spend-col:first-child .cf-spend-tip {
+  left: 0;
+  transform: none;
+}
+.cf-spend-col:last-child .cf-spend-tip {
+  left: auto;
+  right: 0;
+  transform: none;
 }
 .cf-series-0 {
   background: var(--accent);
@@ -201,7 +265,7 @@
   border-radius: var(--radius);
   background: var(--surface);
   color: var(--text);
-  box-shadow: 0 16px 40px rgb(0 0 0 / 45%);
+  box-shadow: var(--pop-shadow);
 }
 .cf-dialog::backdrop {
   background: rgb(0 0 0 / 60%);
@@ -289,7 +353,11 @@
     font-family: inherit;
   }
   .cf-page .cf-table td.numeric .cf-cell-value {
-    font-family: var(--mono);
+    font-variant-numeric: tabular-nums;
+  }
+  .cf-spend-plot {
+    height: 160px;
+    gap: 2px;
   }
   .cf-page .cf-cell-label {
     display: block;
@@ -337,5 +405,14 @@
   }
   .cf-page .cf-buttons button {
     min-height: 40px;
+  }
+}
+
+/* Touch targets: the shared 44px rule, restated over the toolbar's compact sizes. */
+@media (max-width: 760px), (pointer: coarse) {
+  .cf-filters select,
+  .cf-filters input,
+  .cf-active button {
+    min-height: 44px;
   }
 }

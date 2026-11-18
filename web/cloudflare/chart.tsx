@@ -1,4 +1,6 @@
+import { useState } from "react";
 import type { CloudflareData } from "../../src/cloudflare/model";
+import { useEscape } from "../charts";
 import { formatDay, formatMoney } from "./format";
 import { CfTable, Cell, Row } from "./table";
 
@@ -13,6 +15,8 @@ export function DailySpend({
   charges: CloudflareData["charges"];
   currency: string;
 }) {
+  const [hover, setHover] = useState<string | null>(null);
+  useEscape(hover !== null, () => setHover(null));
   const families = [...new Set(charges.map((c) => c.family))].sort();
   const daily = new Map<string, Map<string, number>>();
   for (const c of charges) {
@@ -22,12 +26,14 @@ export function DailySpend({
     daily.set(day, values);
   }
   const rows = [...daily].sort(([a], [b]) => a.localeCompare(b));
-  const max = Math.max(
-    1,
-    ...rows.map(([, v]) =>
-      [...v.values()].reduce((a, b) => a + Math.max(0, b), 0),
-    ),
-  );
+  // Scale to the busiest day; an all-zero range keeps a positive divisor.
+  const max =
+    Math.max(
+      0,
+      ...rows.map(([, v]) =>
+        [...v.values()].reduce((a, b) => a + Math.max(0, b), 0),
+      ),
+    ) || 1;
   if (!rows.length)
     return <p className="empty">No billing data received for these dates.</p>;
   return (
@@ -37,28 +43,52 @@ export function DailySpend({
         role="img"
         aria-label="Daily costs stacked by product. Exact values and corrections are in the data table below."
       >
-        {rows.map(([day, values]) => (
-          <div className="cf-spend-row" key={day}>
-            <span className="cf-nowrap">{formatDay(day, false)}</span>
-            <div className="cf-spend-track">
-              {families.map((family, i) => (
-                <i
-                  key={family}
-                  className={series(i)}
+        <div
+          className="cf-spend-plot"
+          aria-hidden="true"
+          // Long ranges drop the gaps so every day fits the plot width.
+          style={{ gap: rows.length > 62 ? 0 : rows.length > 31 ? 1 : 3 }}
+          onPointerLeave={() => setHover(null)}
+        >
+          {rows.map(([day, values]) => {
+            const sum = [...values.values()].reduce((a, b) => a + b, 0),
+              shown = families.filter((f) => (values.get(f) ?? 0) > 0).length;
+            return (
+              <div
+                className={hover === day ? "cf-spend-col is-hovered" : "cf-spend-col"}
+                key={day}
+                onPointerEnter={() => setHover(day)}
+              >
+                <div
+                  className="cf-spend-stack"
                   style={{
-                    width: `${(Math.max(0, values.get(family) ?? 0) / max) * 100}%`,
+                    height: `${([...values.values()].reduce((a, b) => a + Math.max(0, b), 0) / max) * 100}%`,
+                    // Room for each charged product's 1px segment and the gaps between them.
+                    minHeight: Math.max(2, shown * 2 - 1),
                   }}
-                />
-              ))}
-            </div>
-            <span className="numeric">
-              {formatMoney(
-                [...values.values()].reduce((a, b) => a + b, 0),
-                currency,
-              )}
-            </span>
-          </div>
-        ))}
+                >
+                  {families.map((family, i) => {
+                    const v = Math.max(0, values.get(family) ?? 0);
+                    return v ? (
+                      <i key={family} className={series(i)} style={{ flexGrow: v }} />
+                    ) : null;
+                  })}
+                </div>
+                {hover === day && (
+                  <span className="cf-spend-tip">
+                    <strong>{formatDay(day, false)}</strong>
+                    {formatMoney(sum, currency)}
+                  </span>
+                )}
+              </div>
+            );
+          })}
+        </div>
+        <div className="x-labels" aria-hidden="true">
+          {[...new Set([0, Math.floor((rows.length - 1) / 2), rows.length - 1])].map((i) => (
+            <span key={i}>{formatDay(rows[i]![0], false)}</span>
+          ))}
+        </div>
       </div>
       <ul className="legend">
         {families.map((family, i) => (

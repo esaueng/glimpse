@@ -5,8 +5,9 @@ import type { ReactElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { LineChart, shortDay } from "../web/charts";
-import { Panel, Tile } from "../web/ui";
+import { HeaderActions, PageActions, Panel, Skeleton, Tile } from "../web/ui";
 import { CoverageTable } from "../web/cloudflare/tables";
+import { DailySpend } from "../web/cloudflare/chart";
 import { AccountActivity, Issues, SlowOperations, Storage, Usage } from "../web/views";
 import { Home, Performance, Sources } from "../web/pages";
 import { demoStats } from "../web/demo-data";
@@ -169,6 +170,54 @@ describe("LineChart", () => {
     expect(out).not.toContain("Peak ·");
     expect(out).toContain("No data in this range.");
   });
+
+  it("keys several series with a text legend and one series without", () => {
+    const days = ["2026-11-01", "2026-11-02"];
+    const several = html(
+      <LineChart
+        label="Requests"
+        days={days}
+        series={[
+          { name: "OpenZCAD", values: [1, 2], tone: "accent" },
+          { name: "OpenFEA", values: [3, 4], tone: "fea" },
+        ]}
+      />,
+    );
+    expect(several).toContain('<ul class="legend">');
+    expect(several).toContain("OpenZCAD</li>");
+    expect(several).toContain("OpenFEA</li>");
+    // The pointer readout only exists while hovering.
+    expect(several).not.toContain("chart-tip");
+    const one = html(
+      <LineChart label="Errors" days={days} series={[{ name: "Errors", values: [1, 2], tone: "error" }]} />,
+    );
+    expect(one).not.toContain('class="legend"');
+  });
+});
+
+describe("HeaderActions", () => {
+  it("renders in place when no page header slot is provided", () => {
+    expect(html(<HeaderActions><button type="button">Refresh</button></HeaderActions>)).toBe(
+      '<button type="button">Refresh</button>',
+    );
+    expect(
+      html(
+        <PageActions.Provider value={null}>
+          <HeaderActions>
+            <span>Updated</span>
+          </HeaderActions>
+        </PageActions.Provider>,
+      ),
+    ).toBe("<span>Updated</span>");
+  });
+});
+
+describe("Skeleton", () => {
+  it("announces what is loading", () => {
+    const out = html(<Skeleton label="Loading analytics…" />);
+    expect(out).toContain('role="status"');
+    expect(out).toContain('aria-label="Loading analytics…"');
+  });
 });
 
 describe("CoverageTable", () => {
@@ -324,4 +373,36 @@ it("shows stable adoption counts separately from opted-in workspace opens", () =
   const empty = html(<Usage app="openzcad" data={{ basic: withoutEvents, optional }} />);
   expect(empty).toContain('Workspace sessions</span><strong class="tile-value">—</strong>');
   expect(empty).toContain("No app starts received in this range");
+});
+
+describe("DailySpend", () => {
+  const charge = (day: string, family: string, cost: number) =>
+    ({ start: `${day}T00:00:00Z`, family, cost }) as Parameters<typeof DailySpend>[0]["charges"][number];
+  const days = (n: number) =>
+    Array.from({ length: n }, (_, i) => new Date(Date.UTC(2026, 0, 1 + i)).toISOString().slice(0, 10));
+
+  it("drops column gaps on long ranges so the plot never overflows", () => {
+    const long = html(<DailySpend currency="USD" charges={days(200).map((d) => charge(d, "D1", 1e6))} />);
+    expect(long).toContain('class="cf-spend-plot" aria-hidden="true" style="gap:0"');
+    const month = html(<DailySpend currency="USD" charges={days(30).map((d) => charge(d, "D1", 1e6))} />);
+    expect(month).toContain('style="gap:3px"');
+  });
+
+  it("keeps room for every charged product on a small day", () => {
+    const out = html(
+      <DailySpend
+        currency="USD"
+        charges={[
+          charge("2026-01-01", "Workers", 100e6),
+          charge("2026-01-02", "D1", 0.25e6),
+          charge("2026-01-02", "R2", 0.25e6),
+          charge("2026-01-02", "Workers", 0.25e6),
+        ]}
+      />,
+    );
+    // Three 1px segments and two 1px gaps.
+    expect(out).toContain("min-height:5px");
+    // The day readout appears only while pointing at a column.
+    expect(out).not.toContain("cf-spend-tip");
+  });
 });
