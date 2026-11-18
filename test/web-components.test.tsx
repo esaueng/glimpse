@@ -307,3 +307,21 @@ describe("Monitoring pages", () => {
     expect(out.match(/source-state planned/g)!.length).toBeGreaterThanOrEqual(5);
   });
 });
+
+it("shows stable adoption counts separately from opted-in workspace opens", () => {
+  const range = { app: "openzcad", channel: "stable", from: "2026-11-18", to: "2026-11-18" } as const;
+  const now = new Date("2026-11-18T14:00:00Z");
+  const basic = demoStats({ ...range, level: "basic" }, now);
+  const optional = demoStats({ ...range, level: "optional" }, now);
+  const out = html(<Usage app="openzcad" data={{ basic, optional }} />);
+  expect(out).toContain("Total cloud accounts");
+  expect(out).toContain("Stable · Snapshot");
+  expect(out).toContain("Web sign-in sessions");
+  expect(out).toContain("Workspace sessions");
+  expect(out).toContain("Opted-in cloud accounts");
+  expect(out).toContain("Workspaces opened");
+  const withoutEvents = { ...basic, rows: [] };
+  const empty = html(<Usage app="openzcad" data={{ basic: withoutEvents, optional }} />);
+  expect(empty).toContain('Workspace sessions</span><strong class="tile-value">—</strong>');
+  expect(empty).toContain("No app starts received in this range");
+});

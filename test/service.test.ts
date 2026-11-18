@@ -13,6 +13,7 @@ import {
   publicCensus,
   thresholdActivity,
 } from "../src/expanded";
+import type { Stats } from "../web/data";
 import { dateRange, metric } from "../src/contract";
 let mf: Miniflare;
 let token: string;
@@ -108,6 +109,15 @@ beforeAll(async () => {
             RETENTION: { name: "collector", entrypoint: "CronProbe" },
             PREVIEW: "preview-collector",
             OUTAGE: "outage-collector",
+          },
+        },
+        {
+          name: "stable",
+          modules: true,
+          script: caller,
+          compatibilityDate: "2026-10-15",
+          serviceBindings: {
+            GLIMPSE: { name: "collector", entrypoint: "OpenZCADStableIngest" },
           },
         },
         {
@@ -1035,4 +1045,41 @@ describe("census activity counts", () => {
     const row = (await servedCensus()).census[0];
     for (const k of ACTIVITY_FIELDS) expect(row).not.toHaveProperty(k);
   });
+});
+
+it("receives both channels through fixed RPC bindings and returns separate counters and snapshots", async () => {
+  type Binding = {
+    GLIMPSE: {
+      record(v: unknown): Promise<void>;
+      snapshot(v: unknown): Promise<{ accepted: boolean }>;
+      adoptionSnapshot(v: unknown): Promise<{ accepted: boolean }>;
+    };
+  };
+  const { GLIMPSE: beta } = await mf.getBindings<Binding>("cad");
+  const { GLIMPSE: stable } = await mf.getBindings<Binding>("stable");
+  const counter = { level: "basic", event: "workspace_session", bucket: "none" };
+  await beta.record(counter);
+  await stable.record(counter);
+  await stable.record(counter);
+  const basics = { generation: 3, accounts: 4, signedInAccounts: 2, signInSessions: 3 };
+  expect(await beta.adoptionSnapshot(basics)).toEqual({ accepted: true });
+  expect(await stable.adoptionSnapshot({ ...basics, accounts: 7 })).toEqual({ accepted: true });
+  expect(await stable.adoptionSnapshot({ ...basics, generation: 2 })).toEqual({ accepted: false });
+  await expect(async () => await stable.adoptionSnapshot({ ...basics, accountId: "private" })).rejects.toThrow("Invalid adoption snapshot");
+  await expect(async () => await stable.adoptionSnapshot({ ...basics, signedInAccounts: 5 })).rejects.toThrow("Invalid adoption snapshot");
+  expect(await stable.snapshot({ ...validCensus, generation: 1 })).toEqual({ accepted: true });
+  const read = async (query: string) => {
+    const response = await stats(query);
+    expect(response.status).toBe(200);
+    return await response.json() as Stats;
+  };
+  const betaStats = await read("&app=openzcad");
+  const stableStats = await read("&app=openzcad&channel=stable");
+  expect(betaStats.adoption).toEqual([{ day: today, accounts: 4, signedInAccounts: 2, signInSessions: 3 }]);
+  expect(stableStats.adoption).toEqual([{ day: today, accounts: 7, signedInAccounts: 2, signInSessions: 3 }]);
+  expect(betaStats.rows.find((r) => r.event === "workspace_session")?.count).toBe(1);
+  expect(stableStats.rows.find((r) => r.event === "workspace_session")?.count).toBe(2);
+  const stableOptional = await read("&app=openzcad&level=optional&channel=stable");
+  expect(stableOptional.census).toEqual([{ day: today, app: "openzcad", ...validCensus, generation: 1 }]);
+  expect(stableOptional).not.toHaveProperty("adoption");
 });

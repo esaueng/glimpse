@@ -2,6 +2,7 @@ import { collect } from "./cloudflare/collect";
 import { RETENTION_SOURCE } from "./cloudflare/model";
 import { coverage } from "./cloudflare/store";
 import type { MonitorEnv } from "./cloudflare/env";
+import { missingMigrations } from "./migrations";
 import { logFailure } from "./errors";
 import { retainIssues } from "./sources/store";
 // Must match wrangler.jsonc triggers.crons; test/schedule.test.ts enforces this.
@@ -19,8 +20,11 @@ export async function retain(env: Pick<MonitorEnv, "DB">, now = new Date()) {
     }
   };
   try {
+    const tables = ["daily_counts", "daily_census"];
+    if (!(await missingMigrations(env.DB, "openzcad_channels")).length)
+      tables.push("daily_counts_stable", "daily_census_stable", "daily_openzcad_adoption");
     await env.DB.batch(
-      ["daily_counts", "daily_census"].map((table) =>
+      tables.map((table) =>
         env.DB.prepare(
           `DELETE FROM ${table} WHERE day < date('now','-89 days')`,
         ),

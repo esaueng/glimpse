@@ -33,10 +33,11 @@ describe("REQUIRED_MIGRATIONS", () => {
     for (const surface of OPTIONAL_SURFACES)
       for (const name of requiredFor(surface))
         for (const page of blocking) expect(requiredFor(page)).not.toContain(name);
-    // Optional migrations may only add nullable columns, so older code and data keep working.
+    // Optional migrations may add nullable columns or isolated tables.
     for (const surface of OPTIONAL_SURFACES)
       for (const name of requiredFor(surface))
         for (const statement of migrationSql(name).split(";").filter((s) => s.trim())) {
+          if (/^\s*CREATE TABLE /i.test(statement)) continue;
           expect(statement).toMatch(/^\s*ALTER TABLE \w+ ADD COLUMN /i);
           expect(statement).not.toMatch(/NOT NULL/i);
         }
@@ -218,15 +219,16 @@ describe("pending-migration guard on authenticated API paths", () => {
       accepted: true,
     });
     let body = await optional();
-    expect(body.pendingMigrations).toEqual(["0005_census_activity.sql"]);
+    expect(body.pendingMigrations).toEqual(["0005_census_activity.sql", "0007_openzcad_channels.sql"]);
     expect(body.census).toHaveLength(1);
     expect(body.census[0]).toMatchObject({ accounts: 40, generation: 1 });
     expect(body.census[0]).not.toHaveProperty("active7d");
-    // Basic reads do not touch the census and report nothing pending.
-    expect(((await (await stats()).json()) as Body).pendingMigrations).toBeUndefined();
+    // Basic reads do not report missing optional census fields.
+    expect(((await (await stats()).json()) as Body).pendingMigrations).toEqual(["0007_openzcad_channels.sql"]);
 
     const db = await mf.getD1Database("DB", "collector");
     await applyMigration(db, "0005_census_activity.sql");
+    await applyMigration(db, "0007_openzcad_channels.sql");
     // Rows written before 0005 have no activity flag and stay "not collected".
     body = await optional();
     expect(body.pendingMigrations).toBeUndefined();

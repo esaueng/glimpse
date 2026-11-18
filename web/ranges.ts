@@ -1,4 +1,4 @@
-import { APPS, dateRange } from "../src/contract";
+import { APPS, dateRange, OPENZCAD_CHANNELS, type OpenZCADChannel } from "../src/contract";
 // Timeframe presets over UTC days. Glimpse stores daily aggregates, so the
 // smallest window is one UTC day and the largest is 90 days.
 export type Preset =
@@ -118,10 +118,10 @@ export function customRangeError(from: string, to: string, now = new Date()) {
   return "";
 }
 
-export type Scope = { app: string; from: string; to: string; preset?: Preset };
+export type Scope = { app: string; from: string; to: string; preset?: Preset; channel?: OpenZCADChannel };
 export const scopeApps: readonly string[] = ["all", ...APPS];
 /** Query keys the dashboard owns; everything else (utm_*, cf_*) is preserved. */
-const OWN_KEYS = ["app", "range", "from", "to", "level", "view"];
+const OWN_KEYS = ["app", "range", "from", "to", "level", "view", "channel"];
 const quote = (value: string) =>
   `“${value.length > 24 ? `${value.slice(0, 24)}…` : value}”`;
 
@@ -166,6 +166,10 @@ export function readScope(
       scope = fallback();
     }
   } else scope = fallback();
+  const rawChannel = query.get("channel");
+  const channel = OPENZCAD_CHANNELS.find((value) => value === rawChannel);
+  if (channel) scope.channel = channel;
+  else if (rawChannel !== null) notices.push("Unknown OpenZCAD channel. Showing beta.");
   return { scope, notice: notices.join(" ") };
 }
 
@@ -177,6 +181,7 @@ export const validScope = (scope: Scope, now = new Date()) =>
 /** Canonical query for a scope and view, keeping keys the dashboard does not own. */
 export function scopeSearch(scope: Scope, view: string, current = ""): string {
   const query = new URLSearchParams({ app: scope.app });
+  if (scope.channel) query.set("channel", scope.channel);
   if (scope.preset) query.set("range", scope.preset);
   else {
     query.set("from", scope.from);

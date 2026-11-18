@@ -102,7 +102,7 @@ flowchart LR
   Report[User-shared JSON] --> Inspector[Local report inspector]
 ```
 
-`OpenZCADIngest`, `OpenFEAIngest`, and `OpenLattice3DIngest` fix the caller's app
+`OpenZCADIngest` (beta), `OpenZCADStableIngest`, `OpenFEAIngest`, and `OpenLattice3DIngest` fix the caller's app and channel
 identity. `record({ level, event, bucket })` validates an allowlisted metric and
 increments its UTC receipt-day counter. OpenZCAD also has a `snapshot(...)`
 entrypoint for aggregate cloud statistics; it returns `{ accepted }` so the caller
