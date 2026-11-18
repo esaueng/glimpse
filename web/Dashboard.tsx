@@ -23,6 +23,7 @@ import {
 import { Issues, Storage, Usage } from "./views";
 import { Home, Performance, Sources } from "./pages";
 import { Inbox } from "./inbox";
+import { PageActions, Skeleton } from "./ui";
 import type { IssuesClient } from "./issues-api";
 import type { MonitorLoader, SettingsWriter } from "./Cloudflare";
 import "./style.css";
@@ -200,6 +201,8 @@ export function Dashboard({
     },
   );
   const [menuOpen, setMenuOpen] = useState(false);
+  // Pages without the analytics controls (Costs) place their own actions here.
+  const [actions, setActions] = useState<HTMLDivElement | null>(null);
   const setNotice = (notice: string) =>
     setLocation((current) => ({ ...current, notice }));
   const { from, to } = filter;
@@ -370,6 +373,7 @@ export function Dashboard({
           <h1 ref={heading} tabIndex={-1}>
             {page.title}
           </h1>
+          {!analyticsView && <div className="controls" ref={setActions} />}
           {analyticsView && (
             <div className="controls">
               <RangePicker
@@ -392,7 +396,15 @@ export function Dashboard({
                 </div>
               )}
               {showChannels && (
-                <div className="app-filter" role="group" aria-label="OpenZCAD channel">
+                <div
+                  className="app-filter channel-filter"
+                  role="group"
+                  aria-label="OpenZCAD channel"
+                  title="OpenZCAD release channel"
+                >
+                  <span className="filter-prefix" aria-hidden="true">
+                    ZCAD
+                  </span>
                   {OPENZCAD_CHANNELS.map((site) => (
                     <button
                       key={site}
@@ -400,7 +412,7 @@ export function Dashboard({
                       aria-pressed={(channel ?? "beta") === site}
                       onClick={() => apply({ ...filter, channel: site })}
                     >
-                      {site === "beta" ? "ZCAD Beta" : "ZCAD Stable"}
+                      {site === "beta" ? "Beta" : "Stable"}
                     </button>
                   ))}
                 </div>
@@ -460,18 +472,23 @@ export function Dashboard({
         <ErrorBoundary compact resetKey={`${view}:${app}:${channel}:${from}:${to}`}>
           {view === "costs" ? (
             <Suspense
-              fallback={<p className="notice">Loading Cloudflare monitor…</p>}
+              fallback={<Skeleton label="Loading Cloudflare monitor…" />}
             >
-              <CloudflarePage
-                load={loadCloudflare}
-                write={writeCloudflare}
-                demo={demo}
-              />
+              <PageActions.Provider value={actions}>
+                <CloudflarePage
+                  load={loadCloudflare}
+                  write={writeCloudflare}
+                  demo={demo}
+                />
+              </PageActions.Provider>
             </Suspense>
           ) : view === "privacy" ? (
-            <Privacy />
+            <div className="content" key={view}>
+              <Privacy />
+            </div>
           ) : data ? (
             <div
+              key={view}
               className={loading ? "content is-loading" : "content"}
               aria-busy={loading}
             >
@@ -499,7 +516,7 @@ export function Dashboard({
               )}
             </div>
           ) : (
-            !loading && <p className="notice">No data loaded.</p>
+            loading ? <Skeleton label="Loading analytics…" /> : <p className="notice">No data loaded.</p>
           )}
         </ErrorBoundary>
       </main>

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { useEffect, useRef, useState, type CSSProperties, type PointerEvent, type ReactNode } from "react";
 import { number, percent } from "./data";
 import { sizeLabels, timingLabels } from "./labels";
 export { sizeLabels, timingLabels };
@@ -163,13 +163,25 @@ export function LineChart({
   const empty = !all.some((v) => v > 0),
     // One UTC day has no line to draw: show points and say so in text.
     single = days.length === 1;
+  const [hover, setHover] = useState<number | null>(null);
+  const track = (e: PointerEvent<HTMLDivElement>) => {
+    if (single || empty || days.length < 2) return;
+    const box = e.currentTarget.getBoundingClientRect(),
+      at = Math.round(((e.clientX - box.left) / Math.max(1, box.width)) * (days.length - 1));
+    setHover(Math.min(days.length - 1, Math.max(0, at)));
+  };
   const peakText =
     first && days[peakIndex]
       ? `Peak · ${shortDay(days[peakIndex])} · ${format(first.values[peakIndex] ?? 0)}`
       : "";
   return (
     <figure className="line-chart">
-      <div className="chart-plot" style={{ height }}>
+      <div
+        className={hover === null ? "chart-plot" : "chart-plot is-hovering"}
+        style={{ height }}
+        onPointerMove={track}
+        onPointerLeave={() => setHover(null)}
+      >
         <svg
           viewBox="0 0 1000 200"
           preserveAspectRatio="none"
@@ -242,6 +254,32 @@ export function LineChart({
             <span>{peakText}</span>
           </div>
         )}
+        {hover !== null && days[hover] && (
+          // Pointer readout only; the data table below carries the same values.
+          <div
+            className={`chart-cursor ${x(hover) < 500 ? "start" : "end"}`}
+            aria-hidden="true"
+            style={{ left: `${x(hover) / 10}%` }}
+          >
+            {series.map((s) => (
+              <i
+                key={s.name}
+                className="point"
+                style={{ top: `${(y(s.values[hover] ?? 0) / 200) * 100}%`, borderColor: color(s.tone) }}
+              />
+            ))}
+            <div className="chart-tip">
+              <strong>{shortDay(days[hover])}</strong>
+              {series.map((s) => (
+                <span key={s.name}>
+                  <span className="swatch" style={{ background: color(s.tone) }} />
+                  {series.length > 1 && <span className="tip-name">{s.name}</span>}
+                  <span className="numeric">{format(s.values[hover] ?? 0)}</span>
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
         {empty && <p className="chart-empty">No data in this range.</p>}
       </div>
       {single ? (
@@ -258,6 +296,7 @@ export function LineChart({
             ))}
         </div>
       )}
+      {series.length > 1 && <Legend items={series} />}
       <DataTable label={label}>
         <table>
           <thead>

@@ -1,5 +1,33 @@
 // Shared presentational components for the dashboard and the Cloudflare page.
-import type { ReactNode } from "react";
+import { createContext, useContext, type ReactNode } from "react";
+import { createPortal } from "react-dom";
+
+/** The page header's action area, for pages that bring their own controls. */
+export const PageActions = createContext<HTMLElement | null>(null);
+
+/** Renders into the page header when one is available, otherwise in place. */
+export function HeaderActions({ children }: { children: ReactNode }) {
+  const slot = useContext(PageActions);
+  return slot ? createPortal(children, slot) : <>{children}</>;
+}
+
+/** Placeholder layout shown while a page's first data loads. */
+export function Skeleton({ label }: { label: string }) {
+  return (
+    <div className="skeleton" role="status" aria-label={label}>
+      <div className="skeleton-strip">
+        {[0, 1, 2, 3].map((i) => (
+          <i key={i} />
+        ))}
+      </div>
+      <div className="skeleton-row">
+        <i className="wide" />
+        <i />
+      </div>
+      <i className="skeleton-block" />
+    </div>
+  );
+}
 
 /**
  * One stat in a `.strip`: label, value and an optional note (the children).

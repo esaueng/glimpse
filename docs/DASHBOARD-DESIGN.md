@@ -5,7 +5,7 @@ pale blue. Native React/CSS and SVG; no new chart or UI dependency, imagery,
 gradients, tracking or fetched fonts (system sans and monospace stacks only,
 within the existing `style-src 'self'` policy).
 
-Shell: a 232px sidebar with the Glimpse mark, grouped navigation and the access
+Shell: a 224px sidebar with the Glimpse mark, grouped navigation and the access
 label. Groups: Monitor (Home, Issues, Performance), Product (Usage, Storage),
 Infrastructure (Costs) and Settings (Sources, Privacy). Each item has a 17px line
 icon; the current page has a selected background and an accent icon. No
@@ -14,9 +14,13 @@ carried by pills and text. At 900px
 and below the sidebar becomes a sticky top bar with a menu button
 (`aria-expanded`, Escape closes) that reveals the same navigation.
 
-Page head, one row: title on the left; timeframe picker, segmented app filter
-(All apps and one button per app, `aria-pressed`), last update time and icon
-Refresh on the right. Changes apply immediately. No subtitle, scope sentence or
+Page head, one row, sticky above 900px so the scope stays in reach while the
+page scrolls: title on the left; timeframe picker, segmented app filter
+(All apps and one button per app, `aria-pressed`), the OpenZCAD channel filter
+(a "ZCAD" prefix with Beta and Stable buttons, shown for All apps and OpenZCAD),
+last update time and icon Refresh on the right. Changes apply immediately.
+Pages without the analytics controls render their own actions into the same
+header area (Costs puts its Refresh and status there). No subtitle, scope sentence or
 footer: the controls show the scope, and every opt-in panel or figure carries an
 "Opted-in users" badge or an asterisk explained on the page. A failed load shows
 one error line and keeps the last results. Copy stays short: labels and values,
@@ -113,23 +117,41 @@ Pages:
   read-only.
 - Privacy: unchanged collection boundaries and consent text.
 
-Palette: canvas #0a0f18, surface #111a28, sunken #0d1420, line #22304a, soft
-line #1c2840, control #53688f, text #eef3fb, muted #9db0cc, faint #8396b3,
-sidebar #0c121d, raised #17233a, hover #162135, selected #18253c,
+Palette: canvas #090e17, surface #0f1724, sunken #0c131e, line #213049, soft
+line #19243a, control #53688f, text #eef3fb, muted #9db0cc, faint #8396b3,
+sidebar #0b111b, raised #16223a, hover #142033, selected #17243c,
 accent and OpenZCAD #a9c9fa, OpenFEA #e8eef7, OpenLattice3D #6f95cf, second tone
 #7aa6c2, third tone #5577aa, warning #f6c177, error #ff8a9c (text #ffa3b1), healthy #7fd4a6.
 Status is never shown by colour alone: pills and severities carry their word.
 Control borders and every data tone reach at least 3:1 against the surface
 (WCAG 1.4.11). Apps are told apart by lightness as well as hue; stacked bars
-also carry visible values and legends, so no reading depends on color alone. 26px page titles, 16–18px
-section and panel titles, 26px tabular monospace strip values, 20px page gaps. 12px panel radii,
-6px control radii (squared buttons), 9px navigation group.
+also carry visible values and legends, so no reading depends on color alone.
+
+Type: one system sans stack. Figures use tabular digits in that face;
+monospace is kept for code, URLs, IDs and stack frames. 24px page titles, 16px
+section titles, 15px panel titles, 26px semibold strip values, 20px page gaps.
+12px panel radii, 6px control radii, 8px segmented controls and navigation
+items; pills, badges and bar tracks are fully rounded.
+
+Structure: panels sit on a soft line; figures inside a card never get boxes of
+their own. Grouped figures (health-card stats, At a glance, feature categories,
+account activity) share 1px hairline dividers, like the stat strip. Rows that
+lead elsewhere (health cards, Needs attention) are clickable across their
+whole area through their existing link button.
+
+Motion: 140ms colour and border transitions on controls and rows, a 220ms
+fade-in when a page opens, a short pop for the timeframe popover and a pulsing
+skeleton while the first data loads. `prefers-reduced-motion` removes all of it.
 
 Charts: React-owned SVG lines in a 1000×200 view box with non-scaling strokes;
-tick and date labels are HTML. At most four gridlines. Every line chart has a
-"Data table · UTC" disclosure with exact values. Bars, columns and stacked
-bars carry text values or an accessible label. No hover-only values, live
-animation or polling. Failed refresh keeps prior results and marks them stale.
+tick and date labels are HTML. At most four gridlines. A chart with more than
+one series shows a text legend under its date axis. Pointing at a line chart
+shows a crosshair and a readout of each series for the nearest day (the peak
+chip hides meanwhile); Costs' daily stacked columns show the day's total on
+hover. Readouts are aria-hidden conveniences: every chart has a
+"Data table · UTC" disclosure with exact values, and bars, columns and stacked
+bars carry text values or an accessible label, so no value is hover-only. No
+live animation or polling. Failed refresh keeps prior results and marks them stale.
 
 Empty, unavailable and unsupported stay distinct: "—" for not yet received,
 "N/A" with the owning app named when the filter excludes it (owners follow the

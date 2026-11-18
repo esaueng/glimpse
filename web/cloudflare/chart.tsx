@@ -22,12 +22,14 @@ export function DailySpend({
     daily.set(day, values);
   }
   const rows = [...daily].sort(([a], [b]) => a.localeCompare(b));
-  const max = Math.max(
-    1,
-    ...rows.map(([, v]) =>
-      [...v.values()].reduce((a, b) => a + Math.max(0, b), 0),
-    ),
-  );
+  // Scale to the busiest day; an all-zero range keeps a positive divisor.
+  const max =
+    Math.max(
+      0,
+      ...rows.map(([, v]) =>
+        [...v.values()].reduce((a, b) => a + Math.max(0, b), 0),
+      ),
+    ) || 1;
   if (!rows.length)
     return <p className="empty">No billing data received for these dates.</p>;
   return (
@@ -37,28 +39,41 @@ export function DailySpend({
         role="img"
         aria-label="Daily costs stacked by product. Exact values and corrections are in the data table below."
       >
-        {rows.map(([day, values]) => (
-          <div className="cf-spend-row" key={day}>
-            <span className="cf-nowrap">{formatDay(day, false)}</span>
-            <div className="cf-spend-track">
-              {families.map((family, i) => (
-                <i
-                  key={family}
-                  className={series(i)}
+        <div className="cf-spend-plot" aria-hidden="true">
+          {rows.map(([day, values]) => {
+            const sum = [...values.values()].reduce((a, b) => a + b, 0);
+            return (
+              <div
+                className="cf-spend-col"
+                key={day}
+                title={`${formatDay(day)} · ${formatMoney(sum, currency)}`}
+              >
+                <div
+                  className="cf-spend-stack"
                   style={{
-                    width: `${(Math.max(0, values.get(family) ?? 0) / max) * 100}%`,
+                    height: `${([...values.values()].reduce((a, b) => a + Math.max(0, b), 0) / max) * 100}%`,
                   }}
-                />
-              ))}
-            </div>
-            <span className="numeric">
-              {formatMoney(
-                [...values.values()].reduce((a, b) => a + b, 0),
-                currency,
-              )}
-            </span>
-          </div>
-        ))}
+                >
+                  {families.map((family, i) => {
+                    const v = Math.max(0, values.get(family) ?? 0);
+                    return v ? (
+                      <i key={family} className={series(i)} style={{ flexGrow: v }} />
+                    ) : null;
+                  })}
+                </div>
+                <span className="cf-spend-tip">
+                  <strong>{formatDay(day, false)}</strong>
+                  {formatMoney(sum, currency)}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+        <div className="x-labels" aria-hidden="true">
+          {[...new Set([0, Math.floor((rows.length - 1) / 2), rows.length - 1])].map((i) => (
+            <span key={i}>{formatDay(rows[i]![0], false)}</span>
+          ))}
+        </div>
       </div>
       <ul className="legend">
         {families.map((family, i) => (

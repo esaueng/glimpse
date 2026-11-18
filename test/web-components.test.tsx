@@ -5,7 +5,7 @@ import type { ReactElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { LineChart, shortDay } from "../web/charts";
-import { Panel, Tile } from "../web/ui";
+import { HeaderActions, PageActions, Panel, Skeleton, Tile } from "../web/ui";
 import { CoverageTable } from "../web/cloudflare/tables";
 import { AccountActivity, Issues, SlowOperations, Storage, Usage } from "../web/views";
 import { Home, Performance, Sources } from "../web/pages";
@@ -168,6 +168,54 @@ describe("LineChart", () => {
     );
     expect(out).not.toContain("Peak ·");
     expect(out).toContain("No data in this range.");
+  });
+
+  it("keys several series with a text legend and one series without", () => {
+    const days = ["2026-11-01", "2026-11-02"];
+    const several = html(
+      <LineChart
+        label="Requests"
+        days={days}
+        series={[
+          { name: "OpenZCAD", values: [1, 2], tone: "accent" },
+          { name: "OpenFEA", values: [3, 4], tone: "fea" },
+        ]}
+      />,
+    );
+    expect(several).toContain('<ul class="legend">');
+    expect(several).toContain("OpenZCAD</li>");
+    expect(several).toContain("OpenFEA</li>");
+    // The pointer readout only exists while hovering.
+    expect(several).not.toContain("chart-tip");
+    const one = html(
+      <LineChart label="Errors" days={days} series={[{ name: "Errors", values: [1, 2], tone: "error" }]} />,
+    );
+    expect(one).not.toContain('class="legend"');
+  });
+});
+
+describe("HeaderActions", () => {
+  it("renders in place when no page header slot is provided", () => {
+    expect(html(<HeaderActions><button type="button">Refresh</button></HeaderActions>)).toBe(
+      '<button type="button">Refresh</button>',
+    );
+    expect(
+      html(
+        <PageActions.Provider value={null}>
+          <HeaderActions>
+            <span>Updated</span>
+          </HeaderActions>
+        </PageActions.Provider>,
+      ),
+    ).toBe("<span>Updated</span>");
+  });
+});
+
+describe("Skeleton", () => {
+  it("announces what is loading", () => {
+    const out = html(<Skeleton label="Loading analytics…" />);
+    expect(out).toContain('role="status"');
+    expect(out).toContain('aria-label="Loading analytics…"');
   });
 });
 
