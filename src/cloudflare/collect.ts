@@ -42,6 +42,8 @@ import type { MonitorEnv } from "./env";
 const publicApp = (id: string): string | undefined =>
   Object.hasOwn(APP_NAMES, id) ? APP_NAMES[id as App] : undefined;
 type Status = Coverage["status"];
+const unsupported = (error: unknown) =>
+  error instanceof ApiError && error.status === 422;
 function failure(error: unknown) {
   if (error instanceof ApiError)
     return error.status === 401 || error.status === 403
@@ -64,7 +66,7 @@ async function attempt(
     return "ok";
   } catch (e) {
     const status: Status =
-      canBeUnsupported && e instanceof ApiError && e.status === 422
+      canBeUnsupported && unsupported(e)
         ? "unsupported"
         : "unavailable";
     await coverage(db, source, status, failure(e), now);
@@ -253,7 +255,10 @@ export async function collectPreviousBilling(
       if (rows.length) await saveCharges(db, rows, [period]);
     }),
   );
-  const failure = results.find((result) => result.status === "rejected");
+  const failures = results.filter((result) => result.status === "rejected");
+  // An unsupported cycle must not settle retryable failures in other cycles.
+  const failure =
+    failures.find(({ reason }) => !unsupported(reason)) ?? failures[0];
   if (failure) throw failure.reason;
 }
 export async function collectSubscriptions(

@@ -313,9 +313,22 @@ beforeAll(async () => {
     let fail=false, identity='Esau';
     const hooks=[];
     const reply=result=>Response.json({success:true,result});
-    const transport=async (url,init)=>{
+    const transport=async (url,init,billingRetry)=>{
       const target=new URL(url), path=target.pathname;
       if(target.hostname==='hooks.example.test'){hooks.push(JSON.parse(init.body).text);return new Response('ok');}
+      if(billingRetry && path.endsWith('/billable-usage/info')) return reply({covered:true,subscriptions:[
+        {billing_cycle_anchor_timestamp:'2026-01-10T00:00:00Z',end_timestamp:'2027-02-10T00:00:00Z'},
+        {billing_cycle_anchor_timestamp:'2026-01-28T00:00:00Z'}
+      ]});
+      if(billingRetry && path.endsWith('/billable-usage')){
+        const from=target.searchParams.get('from');
+        if(from==='2027-01-10') return new Response(null,{status:422});
+        if(from==='2027-01-28'){
+          if(billingRetry==='fail') return new Response(null,{status:503});
+          return reply([{...${JSON.stringify(billingRow)},BillingPeriodStart:'2027-01-28T00:00:00Z',ChargePeriodStart:'2027-02-27T00:00:00Z',ChargePeriodEnd:'2027-02-28T00:00:00Z'}]);
+        }
+        return reply([]);
+      }
       if(path.endsWith('/graphql')) {
         const query=JSON.parse(init.body).query;
         if(fail && query.includes('d1Analytics')) return Response.json({data:null,errors:[{message:'private provider detail: does not have access to the path',extensions:{code:'authz'}}]});
@@ -341,7 +354,12 @@ beforeAll(async () => {
       const url=new URL(request.url), path=url.pathname;
       const at=url.searchParams.get('at')||'2026-10-24T12:00:00Z';
       const target=url.searchParams.has('webhook')?{...env,CF_ALERT_WEBHOOK:'https://hooks.example.test/alerts'}:env;
-      if(path==='/_test/collect'){try{await collect(target,new Date(at),transport);}catch(e){return new Response(e.name,{status:500});}return new Response('ok');}
+      if(path==='/_test/collect'){
+        const billingRetry=url.searchParams.get('billingRetry');
+        try{await collect(target,new Date(at),(url,init)=>transport(url,init,billingRetry));}
+        catch(e){return new Response(e.name,{status:500});}
+        return new Response('ok');
+      }
       if(path==='/_test/fail'){fail=url.searchParams.get('on')!=='0';return new Response('ok');}
       if(path==='/_test/identity'){identity=url.searchParams.get('name');return new Response('ok');}
       if(path==='/_test/hooks'){return Response.json(hooks.splice(0));}
@@ -948,4 +966,38 @@ describe("Cloudflare billing rollover", () => {
       { period_start: newStart, n: 1250 },
     ]);
   }, 20_000); // Miniflare executes 2,501 charge inserts on the CI runner.
+
+  it("retries transient historical failures on the next hourly collection", async () => {
+    const db = await mf.getD1Database("DB");
+    const day = "2027-02-28";
+    const run = (hour: string, phase: string) =>
+      mf.dispatchFetch(
+        `https://example.test/_test/collect?at=${day}T${hour}:17:00Z&billingRetry=${phase}`,
+      );
+    const marker = (key: string) =>
+      db
+        .prepare("SELECT value FROM cf_state WHERE key=?")
+        .bind(key)
+        .first("value");
+    const billingStatus = () =>
+      db
+        .prepare(
+          "SELECT status FROM cf_coverage WHERE source='Previous-cycle billing'",
+        )
+        .first("status");
+
+    expect((await run("00", "fail")).status).toBe(200);
+    expect(await marker("billed")).toBe(JSON.stringify(day));
+    expect(await billingStatus()).toBe("unavailable");
+    expect(await marker("billedPrevious")).not.toBe(JSON.stringify(day));
+
+    expect((await run("01", "recover")).status).toBe(200);
+    expect(await marker("billedPrevious")).toBe(JSON.stringify(day));
+    expect(
+      await db
+        .prepare("SELECT cost FROM cf_charges WHERE period_start=?")
+        .bind("2027-01-28T00:00:00.000Z")
+        .first("cost"),
+    ).toBe(1500000);
+  });
 });
