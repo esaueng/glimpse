@@ -947,5 +947,5 @@ describe("Cloudflare billing rollover", () => {
       { period_start: oldStart, n: 1251 },
       { period_start: newStart, n: 1250 },
     ]);
-  });
+  }, 20_000); // Miniflare executes 2,501 charge inserts on the CI runner.
 });
