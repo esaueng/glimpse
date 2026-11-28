@@ -20,6 +20,7 @@ import {
   normalizeCharges,
   resourceKey,
   text,
+  type Charge,
   type Coverage,
   type Resource,
   type Subscription,
@@ -194,22 +195,37 @@ export async function collectBilling(
   const info = await client.accountRequest("/billable-usage/info");
   if (!isRecord(info.result) || info.result.covered !== true)
     throw new ApiError(422);
-  const periods = billingPeriods(info.result, now);
-  if (!periods.length) throw new Error("Billing period missing");
-  // Query the full cycle including its anchor. Arbitrary date filters can return no rows.
-  const rows: unknown[] = [];
-  const starts = [...new Set(periods.map((p) => p.start.slice(0, 10)))];
-  for (const from of starts) {
-    const json = await client.accountRequest(
-      `/billable-usage?from=${from}&to=${isoDay(now)}`,
-    );
+  const current = billingPeriods(info.result, now);
+  if (!current.length) throw new Error("Billing period missing");
+
+  const periods = billingPeriods(info.result, now, true);
+  const refreshed: typeof periods = [];
+  const charges: Charge[] = [];
+  const today = isoDay(now);
+  for (const period of periods) {
+    const from = period.start.slice(0, 10);
+    const end = period.end.slice(0, 10);
+    const closed = end <= today;
+    const to = closed ? end : today;
+    // The endpoint defaults to the current cycle. On its first day an explicit
+    // start and end would coincide, and Cloudflare rejects that range.
+    const path =
+      from === to
+        ? "/billable-usage"
+        : `/billable-usage?from=${from}&to=${to}`;
+    const json = await client.accountRequest(path);
     if (!Array.isArray(json.result)) throw new Error("Billing rows missing");
-    rows.push(...json.result);
+    const rows = (await normalizeCharges(json.result, periods)).filter(
+      (charge) => charge.periodStart === period.start,
+    );
+    // Closed cycles can be missing from the provider response. Keep the last
+    // rated snapshot for those cycles when there are no rows to reconcile.
+    if (!closed || rows.length) refreshed.push(period);
+    charges.push(...rows);
   }
-  const charges = await normalizeCharges(rows, periods);
   const unique = [...new Map(charges.map((c) => [c.id, c])).values()];
-  await saveCharges(db, unique, periods);
-  await setState(db, "periods", periods);
+  await saveCharges(db, unique, refreshed);
+  await setState(db, "periods", current);
 }
 export async function collectSubscriptions(
   client: CloudflareClient,

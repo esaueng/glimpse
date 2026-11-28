@@ -20,6 +20,7 @@ import {
   graphqlFailure,
   usageRows,
 } from "../src/cloudflare/client";
+import { collectBilling } from "../src/cloudflare/collect";
 import { COLLECT_CRON, RETENTION_CRON } from "../src/schedule";
 import { cloudflareDemo } from "../web/cloudflare-demo";
 const now = new Date("2026-10-24T12:00:00Z");
@@ -791,5 +792,87 @@ describe("Cloudflare collection resilience", () => {
     expect(disabled.coverage.map((c) => c.source)).toEqual([
       "Analytics retention",
     ]);
+  });
+});
+
+describe("Cloudflare billing rollover", () => {
+  it("collects on the anchor day and backfills the previous cycle without double-counting", async () => {
+    const previous = {
+      start: "2026-10-28T00:00:00.000Z",
+      end: "2026-11-28T00:00:00.000Z",
+    };
+    const current = {
+      start: previous.end,
+      end: "2026-12-28T00:00:00.000Z",
+    };
+    const lateCharge = {
+      ...billingRow,
+      BillingPeriodStart: previous.start,
+      ChargePeriodStart: "2026-11-27T00:00:00Z",
+      ChargePeriodEnd: "2026-11-28T00:00:00Z",
+    };
+    const currentCharge = {
+      ...billingRow,
+      BillingPeriodStart: current.start,
+      ChargePeriodStart: "2026-11-28T00:00:00Z",
+      ChargePeriodEnd: "2026-11-29T00:00:00Z",
+    };
+    let offline = false;
+    let previousAvailable = true;
+    const transport = vi.fn<typeof fetch>(async (input) => {
+      const url = new URL(String(input));
+      if (url.pathname.endsWith("/info"))
+        return Response.json({
+          success: true,
+          result: {
+            covered: true,
+            subscriptions: [{ billing_cycle_anchor_timestamp: period.start }],
+          },
+        });
+      if (url.search === "?from=2026-10-28&to=2026-11-28")
+        return Response.json({
+          success: true,
+          result: previousAvailable ? [lateCharge, lateCharge] : [],
+        });
+      if (!url.search && !offline)
+        return Response.json({ success: true, result: [currentCharge] });
+      return new Response(null, { status: 400 });
+    });
+    const client = new CloudflareClient("a".repeat(32), "test-token", transport);
+    const db = await mf.getD1Database("DB");
+    const rollover = new Date("2026-11-28T00:17:00Z");
+    const rows = async () =>
+      (
+        await db
+          .prepare(
+            "SELECT period_start, cost FROM cf_charges WHERE period_start>=? ORDER BY period_start",
+          )
+          .bind(previous.start)
+          .all()
+      ).results;
+
+    await collectBilling(client, db, rollover);
+    const expected = [
+      { period_start: previous.start, cost: 1500000 },
+      { period_start: current.start, cost: 1500000 },
+    ];
+    expect(await rows()).toEqual(expected);
+    expect(
+      await db
+        .prepare("SELECT value FROM cf_state WHERE key='periods'")
+        .first("value"),
+    ).toBe(JSON.stringify([current]));
+
+    previousAvailable = false;
+    await collectBilling(client, db, rollover);
+    expect(await rows()).toEqual(expected);
+
+    previousAvailable = true;
+    lateCharge.ContractedCost = 2.5;
+    offline = true;
+    await expect(collectBilling(client, db, rollover)).rejects.toMatchObject({
+      status: 400,
+    });
+    expect(await rows()).toEqual(expected);
   });
 });

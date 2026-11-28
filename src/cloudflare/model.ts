@@ -151,7 +151,11 @@ function nextAnchor(start: string, now: Date) {
     to = candidate(from.getUTCFullYear(), from.getUTCMonth() + 1);
   return { start: from.toISOString(), end: to.toISOString() };
 }
-export function billingPeriods(info: unknown, now = new Date()) {
+export function billingPeriods(
+  info: unknown,
+  now = new Date(),
+  includePrevious = false,
+) {
   const v = info as {
     subscriptions?: {
       billing_cycle_anchor_timestamp?: string;
@@ -163,9 +167,11 @@ export function billingPeriods(info: unknown, now = new Date()) {
     .filter((s) => !s.end_timestamp || s.end_timestamp > now.toISOString())
     .flatMap((s) => {
       const anchor = s.billing_cycle_anchor_timestamp || s.start_timestamp;
-      return anchor && !Number.isNaN(Date.parse(anchor))
-        ? [nextAnchor(anchor, now)]
-        : [];
+      if (!anchor || Number.isNaN(Date.parse(anchor))) return [];
+      const current = nextAnchor(anchor, now);
+      return includePrevious
+        ? [nextAnchor(anchor, new Date(Date.parse(current.start) - 1)), current]
+        : [current];
     });
   return [...new Map(periods.map((p) => [p.start, p])).values()].sort((a, b) =>
     a.start.localeCompare(b.start),
