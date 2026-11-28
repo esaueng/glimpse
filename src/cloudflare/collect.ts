@@ -20,6 +20,7 @@ import {
   normalizeCharges,
   resourceKey,
   text,
+  type Charge,
   type Coverage,
   type Resource,
   type Subscription,
@@ -41,6 +42,8 @@ import type { MonitorEnv } from "./env";
 const publicApp = (id: string): string | undefined =>
   Object.hasOwn(APP_NAMES, id) ? APP_NAMES[id as App] : undefined;
 type Status = Coverage["status"];
+const unsupported = (error: unknown) =>
+  error instanceof ApiError && error.status === 422;
 function failure(error: unknown) {
   if (error instanceof ApiError)
     return error.status === 401 || error.status === 403
@@ -63,7 +66,7 @@ async function attempt(
     return "ok";
   } catch (e) {
     const status: Status =
-      canBeUnsupported && e instanceof ApiError && e.status === 422
+      canBeUnsupported && unsupported(e)
         ? "unsupported"
         : "unavailable";
     await coverage(db, source, status, failure(e), now);
@@ -186,30 +189,77 @@ export async function discover(
     await saveInventory(db, d.kind, resources, now);
   }
 }
+async function readBillingInfo(client: CloudflareClient) {
+  const info = await client.accountRequest("/billable-usage/info");
+  if (!isRecord(info.result) || info.result.covered !== true)
+    throw new ApiError(422);
+  return info.result;
+}
+
+async function billingSnapshot(
+  client: CloudflareClient,
+  period: { start: string; end: string },
+  to: string,
+) {
+  const from = period.start.slice(0, 10);
+  // An explicit start and end would coincide on the current cycle's first day.
+  // On that day, use Cloudflare's documented default current-cycle query.
+  const path =
+    from === to
+      ? "/billable-usage"
+      : `/billable-usage?from=${from}&to=${to}`;
+  const json = await client.accountRequest(path);
+  if (!Array.isArray(json.result)) throw new Error("Billing rows missing");
+  const rows = (await normalizeCharges(json.result, [period])).filter(
+    (charge) => charge.periodStart === period.start,
+  );
+  return [...new Map(rows.map((c) => [c.id, c])).values()];
+}
+
 export async function collectBilling(
   client: CloudflareClient,
   db: D1Database,
   now: Date,
 ) {
-  const info = await client.accountRequest("/billable-usage/info");
-  if (!isRecord(info.result) || info.result.covered !== true)
-    throw new ApiError(422);
-  const periods = billingPeriods(info.result, now);
-  if (!periods.length) throw new Error("Billing period missing");
-  // Query the full cycle including its anchor. Arbitrary date filters can return no rows.
-  const rows: unknown[] = [];
-  const starts = [...new Set(periods.map((p) => p.start.slice(0, 10)))];
-  for (const from of starts) {
-    const json = await client.accountRequest(
-      `/billable-usage?from=${from}&to=${isoDay(now)}`,
-    );
-    if (!Array.isArray(json.result)) throw new Error("Billing rows missing");
-    rows.push(...json.result);
+  const current = billingPeriods(await readBillingInfo(client), now);
+  if (!current.length) throw new Error("Billing period missing");
+  const today = isoDay(now);
+  const charges: Charge[] = [];
+  const refreshed: typeof current = [];
+  for (const period of current) {
+    const rows = await billingSnapshot(client, period, today);
+    // The first day can return no rows while the provider rates usage.
+    if (rows.length || period.start.slice(0, 10) < today) refreshed.push(period);
+    charges.push(...rows);
   }
-  const charges = await normalizeCharges(rows, periods);
-  const unique = [...new Map(charges.map((c) => [c.id, c])).values()];
-  await saveCharges(db, unique, periods);
-  await setState(db, "periods", periods);
+  if (refreshed.length) await saveCharges(db, charges, refreshed);
+  await setState(db, "periods", current);
+}
+
+export async function collectPreviousBilling(
+  client: CloudflareClient,
+  db: D1Database,
+  now: Date,
+) {
+  const info = await readBillingInfo(client);
+  const currentStarts = new Set(billingPeriods(info, now).map((p) => p.start));
+  const today = isoDay(now);
+  const periods = billingPeriods(info, now, "previous").filter(
+    (p) => !currentStarts.has(p.start) && p.start.slice(0, 10) < today,
+  );
+  const results = await Promise.allSettled(
+    periods.map(async (period) => {
+      const end = period.end.slice(0, 10);
+      const rows = await billingSnapshot(client, period, end < today ? end : today);
+      // Keep the stored snapshot when Cloudflare omits a closed cycle.
+      if (rows.length) await saveCharges(db, rows, [period]);
+    }),
+  );
+  const failures = results.filter((result) => result.status === "rejected");
+  // An unsupported cycle must not settle retryable failures in other cycles.
+  const failure =
+    failures.find(({ reason }) => !unsupported(reason)) ?? failures[0];
+  if (failure) throw failure.reason;
 }
 export async function collectSubscriptions(
   client: CloudflareClient,
@@ -260,6 +310,15 @@ async function collectAll(
     )
   )
     await setState(db, "billed", day);
+  if (
+    (await state<string>(db, "billedPrevious")) !== day &&
+    settled(
+      await attempt(db, "Previous-cycle billing", timestamp, () =>
+        collectPreviousBilling(client, db, now),
+      ),
+    )
+  )
+    await setState(db, "billedPrevious", day);
   if (
     (await state<string>(db, "subscribed")) !== day &&
     settled(

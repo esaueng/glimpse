@@ -151,7 +151,11 @@ function nextAnchor(start: string, now: Date) {
     to = candidate(from.getUTCFullYear(), from.getUTCMonth() + 1);
   return { start: from.toISOString(), end: to.toISOString() };
 }
-export function billingPeriods(info: unknown, now = new Date()) {
+export function billingPeriods(
+  info: unknown,
+  now = new Date(),
+  kind: "current" | "previous" = "current",
+) {
   const v = info as {
     subscriptions?: {
       billing_cycle_anchor_timestamp?: string;
@@ -159,14 +163,24 @@ export function billingPeriods(info: unknown, now = new Date()) {
       end_timestamp?: string;
     }[];
   };
-  const periods = (v?.subscriptions ?? [])
-    .filter((s) => !s.end_timestamp || s.end_timestamp > now.toISOString())
-    .flatMap((s) => {
-      const anchor = s.billing_cycle_anchor_timestamp || s.start_timestamp;
-      return anchor && !Number.isNaN(Date.parse(anchor))
-        ? [nextAnchor(anchor, now)]
-        : [];
-    });
+  const periods = (v?.subscriptions ?? []).flatMap((s) => {
+    const anchor = s.billing_cycle_anchor_timestamp || s.start_timestamp;
+    const started = Date.parse(s.start_timestamp ?? "");
+    if (!anchor || Number.isNaN(Date.parse(anchor)) || started > now.getTime())
+      return [];
+    const ended = Date.parse(s.end_timestamp ?? "");
+    const isEnded = ended <= now.getTime();
+    const current = nextAnchor(anchor, now);
+    if (kind === "current") return isEnded ? [] : [current];
+
+    const previous = nextAnchor(anchor, new Date(Date.parse(current.start) - 1));
+    if (!isEnded) return Date.parse(previous.end) <= started ? [] : [previous];
+
+    // A replaced subscription can have a different anchor. Its final cycle
+    // is still eligible for reconciliation within the same lookback window.
+    const final = nextAnchor(anchor, new Date(ended - 1));
+    return final.start >= previous.start ? [final] : [];
+  });
   return [...new Map(periods.map((p) => [p.start, p])).values()].sort((a, b) =>
     a.start.localeCompare(b.start),
   );

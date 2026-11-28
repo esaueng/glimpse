@@ -20,6 +20,10 @@ import {
   graphqlFailure,
   usageRows,
 } from "../src/cloudflare/client";
+import {
+  collectBilling,
+  collectPreviousBilling,
+} from "../src/cloudflare/collect";
 import { COLLECT_CRON, RETENTION_CRON } from "../src/schedule";
 import { cloudflareDemo } from "../web/cloudflare-demo";
 const now = new Date("2026-10-24T12:00:00Z");
@@ -309,9 +313,22 @@ beforeAll(async () => {
     let fail=false, identity='Esau';
     const hooks=[];
     const reply=result=>Response.json({success:true,result});
-    const transport=async (url,init)=>{
+    const transport=async (url,init,billingRetry)=>{
       const target=new URL(url), path=target.pathname;
       if(target.hostname==='hooks.example.test'){hooks.push(JSON.parse(init.body).text);return new Response('ok');}
+      if(billingRetry && path.endsWith('/billable-usage/info')) return reply({covered:true,subscriptions:[
+        {billing_cycle_anchor_timestamp:'2026-01-10T00:00:00Z',end_timestamp:'2027-02-10T00:00:00Z'},
+        {billing_cycle_anchor_timestamp:'2026-01-28T00:00:00Z'}
+      ]});
+      if(billingRetry && path.endsWith('/billable-usage')){
+        const from=target.searchParams.get('from');
+        if(from==='2027-01-10') return new Response(null,{status:422});
+        if(from==='2027-01-28'){
+          if(billingRetry==='fail') return new Response(null,{status:503});
+          return reply([{...${JSON.stringify(billingRow)},BillingPeriodStart:'2027-01-28T00:00:00Z',ChargePeriodStart:'2027-02-27T00:00:00Z',ChargePeriodEnd:'2027-02-28T00:00:00Z'}]);
+        }
+        return reply([]);
+      }
       if(path.endsWith('/graphql')) {
         const query=JSON.parse(init.body).query;
         if(fail && query.includes('d1Analytics')) return Response.json({data:null,errors:[{message:'private provider detail: does not have access to the path',extensions:{code:'authz'}}]});
@@ -337,7 +354,12 @@ beforeAll(async () => {
       const url=new URL(request.url), path=url.pathname;
       const at=url.searchParams.get('at')||'2026-10-24T12:00:00Z';
       const target=url.searchParams.has('webhook')?{...env,CF_ALERT_WEBHOOK:'https://hooks.example.test/alerts'}:env;
-      if(path==='/_test/collect'){try{await collect(target,new Date(at),transport);}catch(e){return new Response(e.name,{status:500});}return new Response('ok');}
+      if(path==='/_test/collect'){
+        const billingRetry=url.searchParams.get('billingRetry');
+        try{await collect(target,new Date(at),(url,init)=>transport(url,init,billingRetry));}
+        catch(e){return new Response(e.name,{status:500});}
+        return new Response('ok');
+      }
       if(path==='/_test/fail'){fail=url.searchParams.get('on')!=='0';return new Response('ok');}
       if(path==='/_test/identity'){identity=url.searchParams.get('name');return new Response('ok');}
       if(path==='/_test/hooks'){return Response.json(hooks.splice(0));}
@@ -791,5 +813,191 @@ describe("Cloudflare collection resilience", () => {
     expect(disabled.coverage.map((c) => c.source)).toEqual([
       "Analytics retention",
     ]);
+  });
+});
+
+describe("Cloudflare billing rollover", () => {
+  it("collects on the anchor day and backfills the previous cycle without double-counting", async () => {
+    const previous = {
+      start: "2026-10-28T00:00:00.000Z",
+      end: "2026-11-28T00:00:00.000Z",
+    };
+    const current = {
+      start: previous.end,
+      end: "2026-12-28T00:00:00.000Z",
+    };
+    const lateCharge = {
+      ...billingRow,
+      BillingPeriodStart: previous.start,
+      ChargePeriodStart: "2026-11-27T00:00:00Z",
+      ChargePeriodEnd: "2026-11-28T00:00:00Z",
+    };
+    const currentCharge = {
+      ...billingRow,
+      BillingPeriodStart: current.start,
+      ChargePeriodStart: "2026-11-28T00:00:00Z",
+      ChargePeriodEnd: "2026-11-29T00:00:00Z",
+    };
+    let currentUnavailable = false;
+    let previousUnavailable = false;
+    let previousAvailable = true;
+    const transport = vi.fn<typeof fetch>(async (input) => {
+      const url = new URL(String(input));
+      if (url.pathname.endsWith("/info"))
+        return Response.json({
+          success: true,
+          result: {
+            covered: true,
+            subscriptions: [{ billing_cycle_anchor_timestamp: period.start }],
+          },
+        });
+      if (url.search === "?from=2026-10-28&to=2026-11-28" && !previousUnavailable)
+        return Response.json({
+          success: true,
+          result: previousAvailable ? [lateCharge, lateCharge] : [],
+        });
+      if (!url.search && !currentUnavailable)
+        return Response.json({ success: true, result: [currentCharge] });
+      return new Response(null, { status: 400 });
+    });
+    const client = new CloudflareClient("a".repeat(32), "test-token", transport);
+    const db = await mf.getD1Database("DB");
+    const rollover = new Date("2026-11-28T00:17:00Z");
+    const rows = async () =>
+      (
+        await db
+          .prepare(
+            "SELECT period_start, cost FROM cf_charges WHERE period_start>=? ORDER BY period_start",
+          )
+          .bind(previous.start)
+          .all()
+      ).results;
+
+    await collectBilling(client, db, rollover);
+    await collectPreviousBilling(client, db, rollover);
+    const expected = [
+      { period_start: previous.start, cost: 1500000 },
+      { period_start: current.start, cost: 1500000 },
+    ];
+    expect(await rows()).toEqual(expected);
+    expect(
+      await db
+        .prepare("SELECT value FROM cf_state WHERE key='periods'")
+        .first("value"),
+    ).toBe(JSON.stringify([current]));
+
+    previousAvailable = false;
+    await collectPreviousBilling(client, db, rollover);
+    expect(await rows()).toEqual(expected);
+
+    currentUnavailable = true;
+    await expect(collectBilling(client, db, rollover)).rejects.toMatchObject({
+      status: 400,
+    });
+    expect(await rows()).toEqual(expected);
+
+    currentUnavailable = false;
+    previousUnavailable = true;
+    currentCharge.ContractedCost = 2;
+    await collectBilling(client, db, rollover);
+    await expect(
+      collectPreviousBilling(client, db, rollover),
+    ).rejects.toMatchObject({ status: 400 });
+    expect(await rows()).toEqual([
+      expected[0],
+      { period_start: current.start, cost: 2000000 },
+    ]);
+  });
+
+  it("reconciles a replaced subscription and saves each cycle within its own batch limit", async () => {
+    const oldStart = "2026-12-10T00:00:00.000Z";
+    const newStart = "2026-12-28T00:00:00.000Z";
+    const subscriptions = [
+      {
+        billing_cycle_anchor_timestamp: "2024-01-10T00:00:00Z",
+        start_timestamp: "2024-01-10T00:00:00Z",
+        end_timestamp: newStart,
+      },
+      {
+        billing_cycle_anchor_timestamp: newStart,
+        start_timestamp: newStart,
+      },
+    ];
+    const result = (count: number, start: string, day: string, end: string) =>
+      Response.json({
+        success: true,
+        result: Array.from({ length: count }, (_, index) => ({
+          ...billingRow,
+          BillingPeriodStart: start,
+          ChargePeriodStart: day,
+          ChargePeriodEnd: end,
+          ChargeDescription: `Billing metric ${index}`,
+        })),
+      });
+    const transport = vi.fn<typeof fetch>(async (input) => {
+      const url = new URL(String(input));
+      if (url.pathname.endsWith("/info"))
+        return Response.json({
+          success: true,
+          result: { covered: true, subscriptions },
+        });
+      if (url.search === "?from=2026-12-10&to=2026-12-28")
+        return result(1251, oldStart, "2026-12-27T00:00:00Z", newStart);
+      if (!url.search)
+        return result(1250, newStart, newStart, "2026-12-29T00:00:00Z");
+      return new Response(null, { status: 400 });
+    });
+    const client = new CloudflareClient("a".repeat(32), "test-token", transport);
+    const db = await mf.getD1Database("DB");
+    const rollover = new Date("2026-12-28T00:17:00Z");
+    await collectBilling(client, db, rollover);
+    await collectPreviousBilling(client, db, rollover);
+    expect(
+      (
+        await db
+          .prepare(
+            "SELECT period_start, COUNT(*) AS n FROM cf_charges WHERE period_start>=? GROUP BY period_start ORDER BY period_start",
+          )
+          .bind(oldStart)
+          .all()
+      ).results,
+    ).toEqual([
+      { period_start: oldStart, n: 1251 },
+      { period_start: newStart, n: 1250 },
+    ]);
+  }, 20_000); // Miniflare executes 2,501 charge inserts on the CI runner.
+
+  it("retries transient historical failures on the next hourly collection", async () => {
+    const db = await mf.getD1Database("DB");
+    const day = "2027-02-28";
+    const run = (hour: string, phase: string) =>
+      mf.dispatchFetch(
+        `https://example.test/_test/collect?at=${day}T${hour}:17:00Z&billingRetry=${phase}`,
+      );
+    const marker = (key: string) =>
+      db
+        .prepare("SELECT value FROM cf_state WHERE key=?")
+        .bind(key)
+        .first("value");
+    const billingStatus = () =>
+      db
+        .prepare(
+          "SELECT status FROM cf_coverage WHERE source='Previous-cycle billing'",
+        )
+        .first("status");
+
+    expect((await run("00", "fail")).status).toBe(200);
+    expect(await marker("billed")).toBe(JSON.stringify(day));
+    expect(await billingStatus()).toBe("unavailable");
+    expect(await marker("billedPrevious")).not.toBe(JSON.stringify(day));
+
+    expect((await run("01", "recover")).status).toBe(200);
+    expect(await marker("billedPrevious")).toBe(JSON.stringify(day));
+    expect(
+      await db
+        .prepare("SELECT cost FROM cf_charges WHERE period_start=?")
+        .bind("2027-01-28T00:00:00.000Z")
+        .first("cost"),
+    ).toBe(1500000);
   });
 });
