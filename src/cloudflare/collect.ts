@@ -187,45 +187,74 @@ export async function discover(
     await saveInventory(db, d.kind, resources, now);
   }
 }
+async function readBillingInfo(client: CloudflareClient) {
+  const info = await client.accountRequest("/billable-usage/info");
+  if (!isRecord(info.result) || info.result.covered !== true)
+    throw new ApiError(422);
+  return info.result;
+}
+
+async function billingSnapshot(
+  client: CloudflareClient,
+  period: { start: string; end: string },
+  to: string,
+) {
+  const from = period.start.slice(0, 10);
+  // An explicit start and end would coincide on the current cycle's first day.
+  // On that day, use Cloudflare's documented default current-cycle query.
+  const path =
+    from === to
+      ? "/billable-usage"
+      : `/billable-usage?from=${from}&to=${to}`;
+  const json = await client.accountRequest(path);
+  if (!Array.isArray(json.result)) throw new Error("Billing rows missing");
+  const rows = (await normalizeCharges(json.result, [period])).filter(
+    (charge) => charge.periodStart === period.start,
+  );
+  return [...new Map(rows.map((c) => [c.id, c])).values()];
+}
+
 export async function collectBilling(
   client: CloudflareClient,
   db: D1Database,
   now: Date,
 ) {
-  const info = await client.accountRequest("/billable-usage/info");
-  if (!isRecord(info.result) || info.result.covered !== true)
-    throw new ApiError(422);
-  const current = billingPeriods(info.result, now);
+  const current = billingPeriods(await readBillingInfo(client), now);
   if (!current.length) throw new Error("Billing period missing");
-
-  const periods = billingPeriods(info.result, now, true);
-  const refreshed: typeof periods = [];
-  const charges: Charge[] = [];
   const today = isoDay(now);
-  for (const period of periods) {
-    const from = period.start.slice(0, 10);
-    const end = period.end.slice(0, 10);
-    const closed = end <= today;
-    const to = closed ? end : today;
-    // The endpoint defaults to the current cycle. On its first day an explicit
-    // start and end would coincide, and Cloudflare rejects that range.
-    const path =
-      from === to
-        ? "/billable-usage"
-        : `/billable-usage?from=${from}&to=${to}`;
-    const json = await client.accountRequest(path);
-    if (!Array.isArray(json.result)) throw new Error("Billing rows missing");
-    const rows = (await normalizeCharges(json.result, periods)).filter(
-      (charge) => charge.periodStart === period.start,
-    );
-    // Closed cycles can be missing from the provider response. Keep the last
-    // rated snapshot for those cycles when there are no rows to reconcile.
-    if (!closed || rows.length) refreshed.push(period);
+  const charges: Charge[] = [];
+  const refreshed: typeof current = [];
+  for (const period of current) {
+    const rows = await billingSnapshot(client, period, today);
+    // The first day can return no rows while the provider rates usage.
+    if (rows.length || period.start.slice(0, 10) < today) refreshed.push(period);
     charges.push(...rows);
   }
-  const unique = [...new Map(charges.map((c) => [c.id, c])).values()];
-  await saveCharges(db, unique, refreshed);
+  if (refreshed.length) await saveCharges(db, charges, refreshed);
   await setState(db, "periods", current);
+}
+
+export async function collectPreviousBilling(
+  client: CloudflareClient,
+  db: D1Database,
+  now: Date,
+) {
+  const info = await readBillingInfo(client);
+  const currentStarts = new Set(billingPeriods(info, now).map((p) => p.start));
+  const today = isoDay(now);
+  const periods = billingPeriods(info, now, "previous").filter(
+    (p) => !currentStarts.has(p.start) && p.start.slice(0, 10) < today,
+  );
+  const results = await Promise.allSettled(
+    periods.map(async (period) => {
+      const end = period.end.slice(0, 10);
+      const rows = await billingSnapshot(client, period, end < today ? end : today);
+      // Keep the stored snapshot when Cloudflare omits a closed cycle.
+      if (rows.length) await saveCharges(db, rows, [period]);
+    }),
+  );
+  const failure = results.find((result) => result.status === "rejected");
+  if (failure) throw failure.reason;
 }
 export async function collectSubscriptions(
   client: CloudflareClient,
@@ -276,6 +305,15 @@ async function collectAll(
     )
   )
     await setState(db, "billed", day);
+  if (
+    (await state<string>(db, "billedPrevious")) !== day &&
+    settled(
+      await attempt(db, "Previous-cycle billing", timestamp, () =>
+        collectPreviousBilling(client, db, now),
+      ),
+    )
+  )
+    await setState(db, "billedPrevious", day);
   if (
     (await state<string>(db, "subscribed")) !== day &&
     settled(

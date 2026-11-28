@@ -20,7 +20,10 @@ import {
   graphqlFailure,
   usageRows,
 } from "../src/cloudflare/client";
-import { collectBilling } from "../src/cloudflare/collect";
+import {
+  collectBilling,
+  collectPreviousBilling,
+} from "../src/cloudflare/collect";
 import { COLLECT_CRON, RETENTION_CRON } from "../src/schedule";
 import { cloudflareDemo } from "../web/cloudflare-demo";
 const now = new Date("2026-10-24T12:00:00Z");
@@ -817,7 +820,8 @@ describe("Cloudflare billing rollover", () => {
       ChargePeriodStart: "2026-11-28T00:00:00Z",
       ChargePeriodEnd: "2026-11-29T00:00:00Z",
     };
-    let offline = false;
+    let currentUnavailable = false;
+    let previousUnavailable = false;
     let previousAvailable = true;
     const transport = vi.fn<typeof fetch>(async (input) => {
       const url = new URL(String(input));
@@ -829,12 +833,12 @@ describe("Cloudflare billing rollover", () => {
             subscriptions: [{ billing_cycle_anchor_timestamp: period.start }],
           },
         });
-      if (url.search === "?from=2026-10-28&to=2026-11-28")
+      if (url.search === "?from=2026-10-28&to=2026-11-28" && !previousUnavailable)
         return Response.json({
           success: true,
           result: previousAvailable ? [lateCharge, lateCharge] : [],
         });
-      if (!url.search && !offline)
+      if (!url.search && !currentUnavailable)
         return Response.json({ success: true, result: [currentCharge] });
       return new Response(null, { status: 400 });
     });
@@ -852,6 +856,7 @@ describe("Cloudflare billing rollover", () => {
       ).results;
 
     await collectBilling(client, db, rollover);
+    await collectPreviousBilling(client, db, rollover);
     const expected = [
       { period_start: previous.start, cost: 1500000 },
       { period_start: current.start, cost: 1500000 },
@@ -864,15 +869,83 @@ describe("Cloudflare billing rollover", () => {
     ).toBe(JSON.stringify([current]));
 
     previousAvailable = false;
-    await collectBilling(client, db, rollover);
+    await collectPreviousBilling(client, db, rollover);
     expect(await rows()).toEqual(expected);
 
-    previousAvailable = true;
-    lateCharge.ContractedCost = 2.5;
-    offline = true;
+    currentUnavailable = true;
     await expect(collectBilling(client, db, rollover)).rejects.toMatchObject({
       status: 400,
     });
     expect(await rows()).toEqual(expected);
+
+    currentUnavailable = false;
+    previousUnavailable = true;
+    currentCharge.ContractedCost = 2;
+    await collectBilling(client, db, rollover);
+    await expect(
+      collectPreviousBilling(client, db, rollover),
+    ).rejects.toMatchObject({ status: 400 });
+    expect(await rows()).toEqual([
+      expected[0],
+      { period_start: current.start, cost: 2000000 },
+    ]);
+  });
+
+  it("reconciles a replaced subscription and saves each cycle within its own batch limit", async () => {
+    const oldStart = "2026-12-10T00:00:00.000Z";
+    const newStart = "2026-12-28T00:00:00.000Z";
+    const subscriptions = [
+      {
+        billing_cycle_anchor_timestamp: "2024-01-10T00:00:00Z",
+        start_timestamp: "2024-01-10T00:00:00Z",
+        end_timestamp: newStart,
+      },
+      {
+        billing_cycle_anchor_timestamp: newStart,
+        start_timestamp: newStart,
+      },
+    ];
+    const result = (count: number, start: string, day: string, end: string) =>
+      Response.json({
+        success: true,
+        result: Array.from({ length: count }, (_, index) => ({
+          ...billingRow,
+          BillingPeriodStart: start,
+          ChargePeriodStart: day,
+          ChargePeriodEnd: end,
+          ChargeDescription: `Billing metric ${index}`,
+        })),
+      });
+    const transport = vi.fn<typeof fetch>(async (input) => {
+      const url = new URL(String(input));
+      if (url.pathname.endsWith("/info"))
+        return Response.json({
+          success: true,
+          result: { covered: true, subscriptions },
+        });
+      if (url.search === "?from=2026-12-10&to=2026-12-28")
+        return result(1251, oldStart, "2026-12-27T00:00:00Z", newStart);
+      if (!url.search)
+        return result(1250, newStart, newStart, "2026-12-29T00:00:00Z");
+      return new Response(null, { status: 400 });
+    });
+    const client = new CloudflareClient("a".repeat(32), "test-token", transport);
+    const db = await mf.getD1Database("DB");
+    const rollover = new Date("2026-12-28T00:17:00Z");
+    await collectBilling(client, db, rollover);
+    await collectPreviousBilling(client, db, rollover);
+    expect(
+      (
+        await db
+          .prepare(
+            "SELECT period_start, COUNT(*) AS n FROM cf_charges WHERE period_start>=? GROUP BY period_start ORDER BY period_start",
+          )
+          .bind(oldStart)
+          .all()
+      ).results,
+    ).toEqual([
+      { period_start: oldStart, n: 1251 },
+      { period_start: newStart, n: 1250 },
+    ]);
   });
 });
